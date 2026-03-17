@@ -203,11 +203,11 @@ cat /proc/sys/kernel/printk
 
 It displays the current settings of printk function. The first value is the current log level, the second value is the default log level attributed to prints that does not specify it, the third value is the minimum log level allowed and the fourth value is the default log level set at boot.
 
-#pagebreak()
+== Exercise 4
 
-== Exercice 4
+=== Memory allocation in module
 
-=== 
+In the module code, we can use `kmalloc` function to allocate memory in kernel space. The allocated memory can be freed using `kfree` function. Linux/list.h provides a linked list implementation.
 
 === Installation/removal results
 
@@ -239,5 +239,9 @@ Here the dsmeg result of my module installation/removal:
 [  131.031133] Deleted 20 elements
 [  131.037425] Sylvan Module Unloaded
 ```
+
+#linebreak()
+
+I create a list of 20 elements at module installation and delete them all at module removal.
 
 == Exercise 5

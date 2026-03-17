@@ -5,7 +5,7 @@
 
 static int __init skeleton_init(void)
 {
-	pr_info ("Exercice 5 module loaded\n");
+	pr_info ("Exercice 5 module loaded, reading registers...\n");
 	return 0;
 }
 
