@@ -1,0 +1,9 @@
+build-all:
+    #!/bin/bash
+    for i in $(dirname */CMAkeLists.txt); do
+        cd $i && just build && cd ..
+    done
+
+clean-all:
+    rm -Rf */build
+

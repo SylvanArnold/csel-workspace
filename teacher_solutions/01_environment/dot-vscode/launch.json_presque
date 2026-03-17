@@ -1,0 +1,43 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "(gdb) Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "app",
+      "args": [
+        "2"
+      ],
+      "stopAtEntry": true,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      // "miDebuggerServerAddress": "192.168.53.14:1234",
+      // "miDebuggerPath": "/buildroot/output/host/bin/aarch64-linux-gdb",
+      "pipeTransport": {
+        // "pipeCwd": "/usr/bin",
+        "pipeProgram": "/usr/bin/ssh",
+        "pipeArgs": [
+          "root@192.168.53.14"
+        ],
+        "debuggerPath": "/usr/bin/gdb"
+        // "debuggerPath": "stdbuf -i0 -o0 -e0 /usr/bin/gdb"
+      },
+      // "logging": {
+      //   "engineLogging": true,
+      // },
+    }
+  ]
+}

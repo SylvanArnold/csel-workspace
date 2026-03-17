@@ -9,10 +9,10 @@ ifneq ($(KERNELRELEASE),)
 obj-m += mymodule.o		## name of the generated module
 
 mymodule-objs := skeleton.o	## list of objects needed for that module
+CFLAGS_skeleton.o := -DDEBUG
 
 # Part executed when called from standard make in module source directory:
 else
-include ../../buildroot_path
 include ../../kernel_settings
 PWD := $(shell pwd)
 
@@ -21,8 +21,10 @@ all:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+	echo $(PATH)
 
 install:
 	$(MAKE) -C $(KDIR) M=$(PWD) INSTALL_MOD_PATH=$(MODPATH) modules_install
 
 endif
+

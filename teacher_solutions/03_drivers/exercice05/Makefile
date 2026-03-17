@@ -1,9 +1,3 @@
-export PATH := /buildroot/output/host/usr/sbin$\
-	:/buildroot/output/host/usr/bin/$\
-	:/buildroot/output/host/sbin$\
-	:/buildroot/output/host/bin/$\
-	:$(PATH)
-
 # Part executed when called from kernel build system:
 ifneq ($(KERNELRELEASE),)
 obj-m += mymodule.o		## name of the generated module
@@ -26,3 +20,4 @@ install:
 	$(MAKE) -C $(KDIR) M=$(PWD) INSTALL_MOD_PATH=$(MODPATH) modules_install
 
 endif
+
