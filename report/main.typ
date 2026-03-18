@@ -209,13 +209,15 @@ It displays the current settings of printk function. The first value is the curr
 
 In the module code, we can use `kmalloc` function to allocate memory in kernel space. The allocated memory can be freed using `kfree` function. Linux/list.h provides a linked list implementation.
 
-=== Installation/removal results
+=== My solution
+
+I created a code that creates a linked list of x elements at module installation and deletes it at module removal. Each element is a structure that contains an integer, a text and a list_head structure. The integer is initialized with the index of the element and the text is initialized with a default value.
 
 Here the dsmeg result of my module installation/removal:
 
 ```sh
 [   97.216060] Sylvan Module Loaded
-[   97.219318] Creating list of 20 elements
+[   97.219318] Creating list of 10 elements
 [  130.972082] Deleting element 0
 [  130.972108] Deleting element 1
 [  130.975174] Deleting element 2
@@ -227,21 +229,56 @@ Here the dsmeg result of my module installation/removal:
 [  130.993633] Deleting element 8
 [  130.996696] Deleting element 9
 [  130.999759] Deleting element 10
-[  131.002812] Deleting element 11
-[  131.005964] Deleting element 12
-[  131.009112] Deleting element 13
-[  131.012264] Deleting element 14
-[  131.015413] Deleting element 15
-[  131.018551] Deleting element 16
-[  131.021693] Deleting element 17
-[  131.024843] Deleting element 18
-[  131.027994] Deleting element 19
-[  131.031133] Deleted 20 elements
+[  131.031133] Deleted 10 elements
 [  131.037425] Sylvan Module Unloaded
 ```
 
-#linebreak()
-
-I create a list of 20 elements at module installation and delete them all at module removal.
-
 == Exercise 5
+
+I started to request the memory regions I needed:
+
+```c
+	ressouces[0] = request_mem_region (0x01c14200, 0x10, "Chip ID");
+	ressouces[1] = request_mem_region (0x01c25080, 0x4, "CPU Temperature");
+	ressouces[2] = request_mem_region (0x01c30050, 0x8, "MAC Address");
+```
+
+But all these requests were failing. These memory regions seems to be already reserved. Thats what I found by running `cat /proc/iomem`:
+
+```sh
+01c14000-01c143ff : 1c14000.eeprom eeprom@1c14000
+01c25000-01c253ff : 1c25000.thermal-sensor thermal-sensor@1c25000
+01c30000-01c3ffff : 1c30000.ethernet ethernet@1c30000
+```
+
+So I changed to code to read these registers without claiming them. I used `ioremap` to map the physical memory addresses to virtual addresses and then I read the values using `ioread32`.
+
+Here is the dmesg result:
+
+```sh
+[  551.289950] Chip ID: 82800001'94004704'5036c304'0425090e
+[  551.295290] CPU Temperature: 38753 m°C
+[  551.299132] MAC Address: 02:01:83:c6:1a:9b
+```
+
+I controlled chip temperature with `cat /sys/class/thermal/thermal_zone0/temp` and also checked my MAC address with `ifconfig`. It matched the values read in the register.
+
+=== Exercise 6
+
+I created a thread in the module that prints a message every 5 seconds. I used `kthread_run` to create and run the thread and `kthread_stop` to stop it at module removal. The thread function is a simple loop that prints a message and sleeps for 5 seconds.
+
+Here is the dmesg result of the installation and removal of the module:
+
+```sh
+[ 3995.237292] Exercice 6 module loaded, reading registers...
+[ 3995.243064] Thread is running
+[ 4000.479559] tick
+[ 4005.599597] tick
+[ 4010.719563] tick
+[ 4015.839569] tick
+[ 4020.959569] tick
+[ 4026.079559] tick
+[ 4031.199560] tick
+[ 4036.319555] tick
+[ 4036.321465] Exercice 6 Module Unloaded, thread stopped
+```

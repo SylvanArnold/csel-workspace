@@ -6,9 +6,9 @@ export PATH := /buildroot/output/host/usr/sbin$\
 
 # Part executed when called from kernel build system:
 ifneq ($(KERNELRELEASE),)
-obj-m += ex5module.o		## name of the generated module
+obj-m += ex6module.o		## name of the generated module
 
-ex5module-objs := skeleton.o	## list of objects needed for that module
+ex6module-objs := skeleton.o	## list of objects needed for that module
 
 # Part executed when called from standard make in module source directory:
 else
