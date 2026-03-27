@@ -272,3 +272,57 @@ The dmesg result:
 = Device Drivers
 
 == Exercise 1
+
+I didn't know how to create the Makefile for a memory mapped device driver so I analysed and used the one provided in the solution. I wrote some comments in the Makefile to explain what each part is doing.
+
+Same for the main.c file. I didn't knew where to start as it was my first time writing a memory mapped device driver. I analysed and commented the solution to understand how it works.
+
+The result of the running app:
+
+```sh
+psz=1000, addr=1c14200, offset=1c14000, ofs=200
+NanoPi NEO Plus2 chipid=82800001'94004704'5036c304'0425090e
+```
+
+The example makes me understand the importance of aligning the memory addresses to the page size when using `mmap` to map physical memory to user space.
+
+== Exercise 2
+
+I created a character device driver based on the skeleton example in the course. I implemented the `open`, `release`, `read`and `write`functions.
+
+The module has an internal `char*` pointer initialised with null value. When the user writes to the device, the pointer is allocated with `kmalloc` and the value is copied from user space to kernel space using `copy_from_user`. The old value is also freed using `kfree` before allocating the new one if it is not the first write. When the user reads from the device, the value is copied from kernel space to user space using `copy_to_user`.
+
+I installed the module with `modprobe`, Inspected `dmesg` to check the major and minor numbers that were attributed:
+
+```sh
+[  533.612204] skeleton: allocated char device region with major 511 and minor 0
+```
+
+Then I created a device file with `mknod`:
+
+```sh
+mknod /dev/skeleton c 511 0
+ls -l /dev/skeleton
+```
+
+The result:
+
+```sh
+crw-r--r-- 1 root root 511, 0 Jan  1 00:16 /dev/skeleton
+```
+
+Then I tested the device with `echo` and `cat` commands:
+
+```sh
+echo "Hello world" > /dev/skeleton
+cat /dev/skeleton
+```
+
+It worked as expected. Event after multipl writes.
+
+== Exercise 3
+
+To set the devices numbers I added a `device_n` module parameter with default value of 1 that user can change at load time. Then in the init function I used a loop that creates n devices. Each device has it's own data storage.
+
+To do so I created a dynamic array of skeleton_dev structure that contains the data pointer and the cdev structure.
+
