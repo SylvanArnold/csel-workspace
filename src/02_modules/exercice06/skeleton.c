@@ -8,7 +8,7 @@
 
 static struct task_struct* ex6thread;
 
-static int thread_func (void* data)
+static int thread_func_1 (void* data)
 {
 	pr_info ("Thread is running\n");
 	while(!kthread_should_stop()) {
@@ -22,7 +22,7 @@ static int __init skeleton_init(void)
 {
 	pr_info ("Exercice 6 module loaded, reading registers...\n");
 
-	ex6thread = kthread_run (thread_func, NULL, "ex6thread");
+	ex6thread = kthread_run (thread_func_1, NULL, "ex6thread");
 	if (IS_ERR(ex6thread)) {
 		pr_info ("Failed to create thread\n");
 		return -EFAULT;

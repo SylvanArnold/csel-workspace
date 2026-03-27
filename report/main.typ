@@ -58,7 +58,7 @@ I created a `skeleton.c` and a `Makefile`, inspired by the examples provided in 
 
 === Test the modinfo command on the generated module
 
-The modinfo tool was not installed. So I added in the buildroot configuration and rebuilt the image. Then I replaced the `/rootfs` directory with the newly builded one.
+The modinfo tool was not installed. So I added it in the buildroot configuration and rebuilt the image. Then I replaced the `/rootfs` directory with the newly builded one.
 
 Here is the result:
 
@@ -73,6 +73,7 @@ vermagic:       5.15.148 SMP preempt mod_unload aarch64
 parm:           text:charp
 parm:           elements:int
 ```
+
 #pagebreak()
 
 === Install the module and check dmesg
@@ -91,57 +92,8 @@ The module works as expected.
 
 === Compare lsmod and cat /proc/modules commands
 
-`cat /proc/modules` result:
-
-```sh
-mymodule 16384 0 - Live 0xffff80000110b000 (O)
-ipv6 462848 18 [permanent], Live 0xffff800001167000
-brcmfmac 253952 0 - Live 0xffff800001128000
-brcmutil 20480 1 brcmfmac, Live 0xffff800001122000
-cfg80211 393216 1 brcmfmac, Live 0xffff8000010aa000
-rfkill 36864 1 cfg80211, Live 0xffff8000010a0000
-sunxi_wdt 20480 0 - Live 0xffff800001042000
-sun8i_mixer 40960 0 - Live 0xffff800001037000
-sun4i_tcon 36864 0 - Live 0xffff80000102d000
-sun8i_tcon_top 16384 1 sun4i_tcon, Live 0xffff80000109b000
-drm_kms_helper 282624 2 sun8i_mixer,sun4i_tcon, Live 0xffff800001055000
-lima 61440 0 - Live 0xffff80000101d000
-gpu_sched 36864 1 lima, Live 0xffff80000104b000
-drm 585728 6 sun8i_mixer,sun4i_tcon,drm_kms_helper,lima,gpu_sched, Live 0xffff800000f8d000
-sun6i_dma 28672 0 - Live 0xffff800000f85000
-sun8i_ce 32768 0 - Live 0xffff800000f7c000
-crypto_engine 20480 1 sun8i_ce, Live 0xffff800000f76000
-crct10dif_ce 20480 1 - Live 0xffff800000f70000
-```
-
-`lsmod` result:
-
-```sh
-Module                  Size  Used by
-mymodule               16384  0
-ipv6                  462848  18
-brcmfmac              253952  0
-brcmutil               20480  1 brcmfmac
-cfg80211              393216  1 brcmfmac
-rfkill                 36864  1 cfg80211
-sunxi_wdt              20480  0
-sun8i_mixer            40960  0
-sun4i_tcon             36864  0
-sun8i_tcon_top         16384  1 sun4i_tcon
-drm_kms_helper        282624  2 sun8i_mixer,sun4i_tcon
-lima                   61440  0
-gpu_sched              36864  1 lima
-drm                   585728  6 gpu_sched,sun8i_mixer,drm_kms_helper,lima,sun4i_tcon
-sun6i_dma              28672  0
-sun8i_ce               32768  0
-crypto_engine          20480  1 sun8i_ce
-crct10dif_ce           20480  1
-```
-
-#linebreak()
 
 The two commands are giving similar results. The `lsmod` command is a user-friendly way to display the loaded modules, while `cat /proc/modules` gives more detailed information about the modules.
-
 
 #pagebreak()
 
@@ -263,9 +215,9 @@ Here is the dmesg result:
 
 I controlled chip temperature with `cat /sys/class/thermal/thermal_zone0/temp` and also checked my MAC address with `ifconfig`. It matched the values read in the register.
 
-=== Exercise 6
+== Exercise 6
 
-I created a thread in the module that prints a message every 5 seconds. I used `kthread_run` to create and run the thread and `kthread_stop` to stop it at module removal. The thread function is a simple loop that prints a message and sleeps for 5 seconds.
+I created a thread in the module that prints a message every 5 seconds. I used `kthread_run` to create and run the thread and `kthread_stop` to stop it at module removal. The thread function is a simple loop that prints a message and sleeps for 5 seconds with `ssleep`.
 
 Here is the dmesg result of the installation and removal of the module:
 
@@ -282,3 +234,41 @@ Here is the dmesg result of the installation and removal of the module:
 [ 4036.319555] tick
 [ 4036.321465] Exercice 6 Module Unloaded, thread stopped
 ```
+
+== Exercise 7
+
+I used a waitqueue as requested in the instructions. At first I had some issue to understand how to use it, as I was confusing waitqueues with message queues. I created two threads, one that sleeps for 5 seconds and then wakes up the other thread using `wake_up_interruptible` function. The second thread is sleeping on the waitqueue using `wait_event_interruptible` function and is woken up by the first thread or if the module is being unloaded.
+
+The dmesg result:
+
+```sh
+[ 1750.174073] Exercice 7 module loaded, reading registers...
+[ 1750.179928] Thread 1 is running
+[ 1750.179967] Thread 2 is running
+[ 1755.359354] Thread 1: notifying thread 2
+[ 1755.363350] Thread 2: received notification from thread 1
+[ 1760.479348] Thread 1: notifying thread 2
+[ 1760.483296] Thread 2: received notification from thread 1
+[ 1765.599346] Thread 1: notifying thread 2
+[ 1765.603288] Thread 2: received notification from thread 1
+...
+[ 1780.872832] Exercice 7 Module Unloaded, threads stopped
+```
+
+== Exercise 8
+
+I created a single interupt handler for the 3 buttons. To distinguish the buttons I created an *enum* that represents the 3 buttons and I passed the corresponding value for each button. For an unknown reason my module failed to request irq for the button k1 (but it worked for k2 and k3). Maybe the pin id is wrong.
+
+The dmesg result:
+
+```sh
+[10209.745763] Failed to request IRQ for GPIO 0
+[10209.750235] Exercice 8 module loaded
+[10248.209782] Interrupt from K2
+[10254.388959] Interrupt from K3
+[10264.665848] Interrupt from K2
+```
+
+= Device Drivers
+
+== Exercise 1
