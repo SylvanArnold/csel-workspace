@@ -5,25 +5,44 @@
 #include <linux/kernel.h>      /* needed for debugging */
 #include <linux/module.h>      /* needed by all modules */
 #include <linux/moduleparam.h> /* needed for module parameters */
+#include <linux/string.h>      /* needed for strnlen */
 #include <linux/uaccess.h>     /* needed to copy data to/from user */
 
 #include <linux/slab.h> // needed for kmalloc and kfree
 
+// Device structure to hold device informations
+struct skeleton_device {
+    char name[20];
+    dev_t dev_number;
+    struct cdev cdev;
+};
 
-static char * data = NULL;
-static dev_t skeleton_dev_number;
-static struct cdev skeleton_cdev;
+static struct skeleton_device *skeleton_devices = NULL;
+static char **skeleton_buffers = NULL;
 
-static int devices_number = 1;
+#define SKELETON_BUFFER_SIZE 256
+
+
+static int devices_number = 1; // default device number is 1, can be set at module load time
 module_param(devices_number, int, 0);
 
 
 static int skeleton_open(struct inode* i, struct file* f)
 {
+    int idx;
+
     pr_info("skeleton : open operation... major:%d, minor:%d\n",
             imajor(i),
             iminor(i));
-    if ((f->f_mode & (FMODE_READ | FMODE_WRITE)) != 0) {
+
+    idx = iminor(i) - MINOR(skeleton_devices[0].dev_number);
+    if (idx < 0 || idx >= devices_number)
+        return -ENODEV;
+
+    // store the internal buffer pointer in the file's private data for later use in read/write operations
+    f->private_data = skeleton_buffers[idx];
+
+    if ((f->f_mode & (FMODE_READ | FMODE_WRITE)) == (FMODE_READ | FMODE_WRITE)) {
         pr_info("skeleton : opened for reading & writing...\n");
     } else if ((f->f_mode & FMODE_READ) != 0) {
         pr_info("skeleton : opened for reading...\n");
@@ -43,11 +62,12 @@ static int skeleton_release(struct inode* i, struct file* f)
 // Caller tell how many bytes he wants to read and the offset in the buffer, we copy the data to user space and update the offset
 static ssize_t skeleton_read(struct file* f,char __user* buf,size_t count, loff_t* off)
 {
+    char *data = (char*)f-> private_data; // get the internal buffer from the file's private data
     size_t len;
     if (data == NULL)
         return 0; // EOF
 
-    len = strlen(data);
+    len = strnlen(data, SKELETON_BUFFER_SIZE);
 
     // check if offset is beyond the end of the buffer (means no more data to read)
     if (*off >= len) 
@@ -67,25 +87,24 @@ static ssize_t skeleton_read(struct file* f,char __user* buf,size_t count, loff_
 }
 
 // Write data to the internal buffer
-// We free the previous buffer if any, allocate a new one to hold the incoming data,
+// Data is copied into a fixed-size per-device buffer allocated at module init.
 static ssize_t skeleton_write(struct file* f,const char __user* buf,size_t count,loff_t* off)
 {
-    // free previous data if any
-    if (data) {
-        kfree(data);
-        data = NULL;
-    }
-    // allocate new buffer to hold the incoming data, add 1 for null terminator
-    data = kmalloc(count + 1, GFP_KERNEL);
+    char *data = (char*)f-> private_data; // get the internal buffer from the file's private data
+    size_t bytes_to_copy;
+
     if (!data)
-        return -ENOMEM;
+        return -ENODEV;
+
+    bytes_to_copy = min(count, (size_t)SKELETON_BUFFER_SIZE - 1);
 
     // copy data from user space to internal buffer
-    if (copy_from_user(data, buf, count))
+    if (copy_from_user(data, buf, bytes_to_copy))
         return -EFAULT;
 
-    data[count] = '\0'; // null terminate the string
-    return count;
+    data[bytes_to_copy] = '\0'; // null terminate the string
+    *off = 0; // reset read position so next read starts from beginning
+    return bytes_to_copy;
 }
 
 static struct file_operations skeleton_fops = {
@@ -98,29 +117,101 @@ static struct file_operations skeleton_fops = {
 
 static int __init skeleton_init(void)
 {
-    // allocate a char device region with 1 minor number, the major number will be dynamically allocated by the kernel
-    int status = alloc_chrdev_region(&skeleton_dev_number, 0, 1, "skeleton");
-    if (status == 0) {
-            cdev_init(&skeleton_cdev, &skeleton_fops); // initialize the char device with the file operations
-            skeleton_cdev.owner = THIS_MODULE; // set the owner of the device to this module
-            status= cdev_add(&skeleton_cdev, skeleton_dev_number, 1); // add the char device to the system
-        }
+    int status;
+    int i, j;
+
+    if (devices_number <= 0)
+        return -EINVAL;
+
     
-    pr_info("skeleton: allocated char device region with major %d and minor %d\n", MAJOR(skeleton_dev_number), MINOR(skeleton_dev_number));
+    skeleton_devices = kmalloc_array(devices_number, sizeof(struct skeleton_device), GFP_KERNEL);
+    if (!skeleton_devices){
+        pr_err("skeleton: failed to allocate memory for devices\n");
+        return -ENOMEM;
+    }
+
+    skeleton_buffers = kmalloc_array(devices_number, sizeof(char *), GFP_KERNEL);
+    if (!skeleton_buffers) {
+        pr_err("skeleton: failed to allocate memory for buffers\n");
+        kfree(skeleton_devices);
+        skeleton_devices = NULL;
+        return -ENOMEM;
+    }
+
+    for (i = 0; i < devices_number; i++) {
+        skeleton_buffers[i] = kmalloc(SKELETON_BUFFER_SIZE, GFP_KERNEL);
+        if (!skeleton_buffers[i]) {
+            pr_err("skeleton: failed to allocate buffer for device %d\n", i);
+            for (j = 0; j < i; j++)
+                kfree(skeleton_buffers[j]);
+            kfree(skeleton_buffers);
+            skeleton_buffers = NULL;
+            kfree(skeleton_devices);
+            skeleton_devices = NULL;
+            return -ENOMEM;
+        }
+        skeleton_buffers[i][0] = '\0';
+    }
+
+    // allocate a char device region for all devices
+    status = alloc_chrdev_region(&skeleton_devices[0].dev_number, 0, devices_number, "skeleton");
+    if (status < 0) {
+        pr_err("skeleton: failed to allocate char device region\n");
+        for (i = 0; i < devices_number; i++)
+            kfree(skeleton_buffers[i]);
+        kfree(skeleton_buffers);
+        skeleton_buffers = NULL;
+        kfree(skeleton_devices);
+        skeleton_devices = NULL;
+        return status;
+    }
+
+    for (i = 0; i < devices_number; i++) { // initialize each device
+        snprintf(skeleton_devices[i].name, sizeof(skeleton_devices[i].name), "skeleton%d", i); // set the device name
+        skeleton_devices[i].dev_number = MKDEV(MAJOR(skeleton_devices[0].dev_number), MINOR(skeleton_devices[0].dev_number) + i); 
+        cdev_init(&skeleton_devices[i].cdev, &skeleton_fops); 
+        skeleton_devices[i].cdev.owner = THIS_MODULE;
+        status = cdev_add(&skeleton_devices[i].cdev, skeleton_devices[i].dev_number, 1);
+        if (status) {
+            pr_err("skeleton: failed to add cdev for device %d\n", i);
+            // cleanup already added devices
+            for (j = 0; j < i; j++) {
+                cdev_del(&skeleton_devices[j].cdev);
+            }
+            unregister_chrdev_region(skeleton_devices[0].dev_number, devices_number);
+            for (j = 0; j < devices_number; j++)
+                kfree(skeleton_buffers[j]);
+            kfree(skeleton_buffers);
+            skeleton_buffers = NULL;
+            kfree(skeleton_devices);
+            skeleton_devices = NULL;
+            return status;
+        }
+    }
+
+    pr_info("skeleton: allocated char device region with major %d and %d devices\n", MAJOR(skeleton_devices[0].dev_number), devices_number);
     pr_info ("Driver module loaded\n");
     return 0;
 }
 
 static void __exit skeleton_exit(void)
 {
-    // release the allocated buffer if any
-    if (data) {
-        kfree(data);
-        data = NULL;
+    int i;
+    if (skeleton_devices) {
+        for (i = 0; i < devices_number; i++) {
+            cdev_del(&skeleton_devices[i].cdev);
+        }
+        unregister_chrdev_region(skeleton_devices[0].dev_number, devices_number);
+        kfree(skeleton_devices);
+        skeleton_devices = NULL;
     }
-    // unregister the char device region
-    cdev_del(&skeleton_cdev); // remove the char device from the system
-    unregister_chrdev_region(skeleton_dev_number, 1); // release the allocated device region
+
+    if (skeleton_buffers) {
+        for (i = 0; i < devices_number; i++)
+            kfree(skeleton_buffers[i]);
+        kfree(skeleton_buffers);
+        skeleton_buffers = NULL;
+    }
 
     pr_info ("Driver module unloaded\n");
 }

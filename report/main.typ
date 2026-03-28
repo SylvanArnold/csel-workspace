@@ -322,7 +322,7 @@ It worked as expected. Event after multipl writes.
 
 == Exercise 3
 
-To set the devices numbers I added a `device_n` module parameter with default value of 1 that user can change at load time. Then in the init function I used a loop that creates n devices. Each device has it's own data storage.
+To set the devices numbers I added a `device_n` module parameter with default value of 1 that user can change at load time. Then in the init function I used a loop that creates n devices.
 
-To do so I created a dynamic array of skeleton_dev structure that contains the data pointer and the cdev structure.
+I had to adapt previous code to handle multiple devices. To make things much simpler I defined a fixed buffer size that is created for each device at module initialization and freed once at module removal. 
 
