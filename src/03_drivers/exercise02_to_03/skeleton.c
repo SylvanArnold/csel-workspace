@@ -5,6 +5,7 @@
 #include <linux/kernel.h>      /* needed for debugging */
 #include <linux/module.h>      /* needed by all modules */
 #include <linux/moduleparam.h> /* needed for module parameters */
+#include <linux/device.h>      /* needed for class/device creation */
 #include <linux/string.h>      /* needed for strnlen */
 #include <linux/uaccess.h>     /* needed to copy data to/from user */
 
@@ -19,6 +20,7 @@ struct skeleton_device {
 
 static struct skeleton_device *skeleton_devices = NULL;
 static char **skeleton_buffers = NULL;
+static struct class *skeleton_class = NULL;
 
 #define SKELETON_BUFFER_SIZE 256
 
@@ -166,6 +168,20 @@ static int __init skeleton_init(void)
         return status;
     }
 
+    skeleton_class = class_create(THIS_MODULE, "skeleton");
+    if (IS_ERR(skeleton_class)) {
+        status = PTR_ERR(skeleton_class);
+        skeleton_class = NULL;
+        unregister_chrdev_region(skeleton_devices[0].dev_number, devices_number);
+        for (i = 0; i < devices_number; i++)
+            kfree(skeleton_buffers[i]);
+        kfree(skeleton_buffers);
+        skeleton_buffers = NULL;
+        kfree(skeleton_devices);
+        skeleton_devices = NULL;
+        return status;
+    }
+
     for (i = 0; i < devices_number; i++) { // initialize each device
         snprintf(skeleton_devices[i].name, sizeof(skeleton_devices[i].name), "skeleton%d", i); // set the device name
         skeleton_devices[i].dev_number = MKDEV(MAJOR(skeleton_devices[0].dev_number), MINOR(skeleton_devices[0].dev_number) + i); 
@@ -185,7 +201,33 @@ static int __init skeleton_init(void)
             skeleton_buffers = NULL;
             kfree(skeleton_devices);
             skeleton_devices = NULL;
+            class_destroy(skeleton_class);
+            skeleton_class = NULL;
             return status;
+        }
+
+        if (IS_ERR(device_create(skeleton_class,
+                                 NULL,
+                                 skeleton_devices[i].dev_number,
+                                 NULL,
+                                 "%s",
+                                 skeleton_devices[i].name))) {
+            pr_err("skeleton: failed to create device node for device %d\n", i);
+            cdev_del(&skeleton_devices[i].cdev);
+            for (j = 0; j < i; j++) {
+                device_destroy(skeleton_class, skeleton_devices[j].dev_number);
+                cdev_del(&skeleton_devices[j].cdev);
+            }
+            class_destroy(skeleton_class);
+            skeleton_class = NULL;
+            unregister_chrdev_region(skeleton_devices[0].dev_number, devices_number);
+            for (j = 0; j < devices_number; j++)
+                kfree(skeleton_buffers[j]);
+            kfree(skeleton_buffers);
+            skeleton_buffers = NULL;
+            kfree(skeleton_devices);
+            skeleton_devices = NULL;
+            return -ENOMEM;
         }
     }
 
@@ -197,6 +239,14 @@ static int __init skeleton_init(void)
 static void __exit skeleton_exit(void)
 {
     int i;
+
+    if (skeleton_class && skeleton_devices) {
+        for (i = 0; i < devices_number; i++)
+            device_destroy(skeleton_class, skeleton_devices[i].dev_number);
+        class_destroy(skeleton_class);
+        skeleton_class = NULL;
+    }
+
     if (skeleton_devices) {
         for (i = 0; i < devices_number; i++) {
             cdev_del(&skeleton_devices[i].cdev);

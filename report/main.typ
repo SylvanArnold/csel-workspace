@@ -326,3 +326,28 @@ To set the devices numbers I added a `device_n` module parameter with default va
 
 I had to adapt previous code to handle multiple devices. To make things much simpler I defined a fixed buffer size that is created for each device at module initialization and freed once at module removal. 
 
+I also modified the code to directly create the device files in `/dev` using `device_create` function instead of creating them manually with `mknod`.
+
+== Exercise 4
+
+I created a rust program that interracts with the devices created in the previous exercise. Here are the commands I used to compile it for correct achitecture:
+
+```sh
+rustup target add aarch64-unknown-linux-gnu
+export PATH=/buildroot/output/host/usr/bin:$PATH
+cargo build --release --target aarch64-unknown-linux-gnu
+```
+Then I ran the program:
+
+```sh
+/workspace/src/03_drivers/exercise04/target/aarch64-unknown-linux-gnu/release/exercise04
+```
+
+The program output: 
+
+```sh
+Opened all devices
+Response from device 0: Hello, device 0
+Response from device 1: Hello, device 1
+Response from device 2: Hello, device 2
+```
