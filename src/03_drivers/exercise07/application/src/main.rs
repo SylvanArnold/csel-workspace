@@ -8,6 +8,7 @@ use mio::unix::SourceFd;
 const SWITCH_TOKEN: Token = Token(0);
 
 fn main() -> io::Result<()> {
+    let mut total_interrupts = 0;
     // Reset the interrupt counter by writing "0" to the sysfs attribute.
     let mut sysfs_file = OpenOptions::new()
         .write(true)
@@ -53,8 +54,9 @@ fn main() -> io::Result<()> {
                             Ok(bytes_read) => {
                                 if bytes_read > 0 {
                                     // Convert the read bytes to a string and print it.
-                                    let response = String::from_utf8_lossy(&buffer[..bytes_read]);
-                                    println!("Response from device /dev/switch_driver: {}", response);
+                                    let n_interrupts_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+                                    total_interrupts += n_interrupts_str.trim().parse::<u32>().unwrap_or(total_interrupts);
+                                    println!("Received data from driver: {} (Total interrupts: {})", n_interrupts_str.trim(), total_interrupts);
                                 }
                             }
                             // If the read would block, it means no data is available right now.
