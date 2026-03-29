@@ -13,52 +13,59 @@
   footer-text: "MA_CSEL1", // Text used in left side of the footer
 )
 
+= Introduction
+
+This report summarizes my work on the lab exercises for the "Linux embedded systems" course. Here is the link to the GitHub repository containing all my code:
+
+*#link("https://github.com/SylvanArnold/csel-workspace")[GitHub Repository]*
+
+Under the `src` directory, you can find the code for each exercise organized in separate folders. The `report` directory contains the source files for this report, including this main file (`main.typ`). The `teacher_solutions` directory contains the solutions provided by the teacher for each exercise.
+
 = Environment setup
 
 == Steps
 
 I followed the steps as described in the lab instructions. Everything worked as expected.
 
-*NOTE*: I added a rootfs overlay directory to the buildroot configuration so I can keep my custom files (like /etc/fstab) in it and they will be included in the generated rootfs. This way I don't have to remodify the rootfs every time I want to rebuild the image.
+*Note:* I added a rootfs overlay directory to the buildroot configuration to keep my custom files (like `/etc/fstab`). These files are included in the generated rootfs, so I don't have to modify the rootfs every time I rebuild the image.
 
-== Questions Answers
+== Answers to Questions
 
-=== How do we proceed to generate U-boot?
+=== How do we proceed to generate U-Boot?
 
-In our case Uboot is already included in the buildroot configuration (has been included via `make menuconfig`). The `make`command will generate the sd card image with the Uboot included.
+In our case, U-Boot is already included in the buildroot configuration (via `make menuconfig`). The `make` command will generate the SD card image with U-Boot included.
 
-=== How can we add additional package to the buildroot configuration?
+=== How can we add additional packages to the buildroot configuration?
 
-By running `make menuconfig`in the buildroot directory we can access the configuration menu. Then you can go inside `target packages`section and add additional packages to the build. If we run `make` the new package will be included in the build.
+By running `make menuconfig` in the buildroot directory, we can access the configuration menu. Then, you can go inside the `Target packages` section and add additional packages to the build. If we run `make`, the new package will be included in the build.
 
 === How do we proceed to modify the kernel configuration?
 
-By running `make linux-menuconfig` in the buildroot directory we can access the kernel configuration menu and modify the kernel configuration.
+By running `make linux-menuconfig` in the buildroot directory, we can access the kernel configuration menu and modify the kernel configuration.
 
 === How can we generate our own rootfs?
 
-You can create a rootfs overlay directory, add it in the buildroot configuration (using `menuconfig`) and then when running `make`the overlay directory will be included in the generated rootfs.
+You can create a rootfs overlay directory, add it to the buildroot configuration (using `menuconfig`), and then when running `make`, the overlay directory will be included in the generated rootfs.
 
-=== How can we use emmc instead of sd card?
+=== How can we use eMMC instead of an SD card?
 
-Change U-boot boot command to load kernel/rootfs/... from emmc instead of sd card (change ext4load mmc 1:1 to ext4load mmc 0:1 for example). Use a USB flashing tool to flash the generated image on the emmc directly.
+Change the U-Boot boot command to load the kernel/rootfs from eMMC instead of the SD card (for example, change `ext4load mmc 1:1` to `ext4load mmc 0:1`). Use a USB flashing tool to flash the generated image directly onto the eMMC.
 
-=== What would be the optimal configuration for developping applications in user space only?
+=== What would be the optimal configuration for developing applications in user space only?
 
-The optimal configuration is cross compiling the application on host machine then syncing the builded application with the target device. The easiest way to sync files is to use a CIFS share on the host machine and mount it on the target device (as we did with workspace directory). Then use ssh to access the target device and run the application. No need to sync the entire rootfs and no need to download the kernel from network at boot.
+The optimal configuration is to cross-compile the application on a host machine and then sync the built application with the target device. The easiest way to sync files is to use a CIFS share on the host machine and mount it on the target device (as we did with the workspace directory). Then, use SSH to access the target device and run the application. There is no need to sync the entire rootfs or download the kernel from the network at boot.
 
-= Kernel Modules programming
+= Kernel Modules Programming
 
 == Exercise 1
 
 === Create a skeleton module outside the kernel tree
 
-I created a `skeleton.c` and a `Makefile`, inspired by the examples provided in the course. I builded the module using `make` and it generated a `skeleton.ko` file.
+I created a `skeleton.c` and a `Makefile`, inspired by the examples provided in the course. I built the module using `make`, which generated a `skeleton.ko` file.
 
+=== Test the `modinfo` command on the generated module
 
-=== Test the modinfo command on the generated module
-
-The modinfo tool was not installed. So I added it in the buildroot configuration and rebuilt the image. Then I replaced the `/rootfs` directory with the newly builded one.
+The `modinfo` tool was not installed, so I added it to the buildroot configuration and rebuilt the image. Then, I replaced the `/rootfs` directory with the newly built one.
 
 Here is the result:
 
@@ -76,7 +83,7 @@ parm:           elements:int
 
 #pagebreak()
 
-=== Install the module and check dmesg
+=== Install the module and check `dmesg`
 
 ```sh
 insmod /workspace/./src/02_modules/exercice01/mymodule.ko
@@ -87,21 +94,19 @@ dmesg
 [  761.493297] Linux module skeleton loaded
 ```
 
-
 The module works as expected.
 
-=== Compare lsmod and cat /proc/modules commands
+=== Compare `lsmod` and `cat /proc/modules` commands
 
-
-The two commands are giving similar results. The `lsmod` command is a user-friendly way to display the loaded modules, while `cat /proc/modules` gives more detailed information about the modules.
+The two commands give similar results. The `lsmod` command is a user-friendly way to display the loaded modules, while `cat /proc/modules` gives more detailed information.
 
 #pagebreak()
 
 == Exercise 2
 
-=== Adapt rootfs to include modprobe
+=== Adapt rootfs to include `modprobe`
 
-I already installed modprobe in the rootfs in the previous exercise. The module has to be installed in the rootfs as well. To do that we can add an install target in the module makefile:
+I already installed `modprobe` in the rootfs in the previous exercise. The module also has to be installed in the rootfs. To do that, we can add an `install` target in the module's Makefile:
 
 ```makefile
 install:
@@ -110,9 +115,9 @@ install:
 
 Then, when we run `make install` in the module directory, the module will be installed in the rootfs.
 
-=== Adapt previous module to accept and log parameters
+=== Adapt the previous module to accept and log parameters
 
-Parameters can be declared as static variables in the module code:
+Parameters can be declared as static variables in the module's code:
 
 ```c
 #include <linux/moduleparam.h>  /* needed for module parameters */
@@ -123,20 +128,20 @@ static int  elements = 1;
 module_param(elements, int, 0);
 ```
 
-Then we can log them in the console using pr_info: 
+Then, we can log them in the console using `pr_info`:
 
 ```c
 pr_info("  text: %s\n", text);
 pr_info("  elements: %d\n", elements);
 ```
 
-Then the parameters can be passed to the module at load time using `modprobe`:
+The parameters can be passed to the module at load time using `modprobe`:
 
 ```sh
 modprobe mymodule text="hello world" elements=42
 ```
 
-The parameters are then displayed in dmesg:
+The parameters are then displayed in `dmesg`:
 
 ```sh
 [ 4564.063892] Linux module 01 skeleton loaded
@@ -153,19 +158,19 @@ cat /proc/sys/kernel/printk
 7       4       1       7
 ```
 
-It displays the current settings of printk function. The first value is the current log level, the second value is the default log level attributed to prints that does not specify it, the third value is the minimum log level allowed and the fourth value is the default log level set at boot.
+This command displays the current settings of the `printk` function. The first value is the current log level, the second value is the default log level attributed to prints that do not specify it, the third value is the minimum log level allowed, and the fourth value is the default log level set at boot.
 
 == Exercise 4
 
-=== Memory allocation in module
+=== Memory allocation in the module
 
-In the module code, we can use `kmalloc` function to allocate memory in kernel space. The allocated memory can be freed using `kfree` function. Linux/list.h provides a linked list implementation.
+In the module's code, we can use the `kmalloc` function to allocate memory in the kernel space. The allocated memory can be freed using the `kfree` function. `linux/list.h` provides a linked list implementation.
 
 === My solution
 
-I created a code that creates a linked list of x elements at module installation and deletes it at module removal. Each element is a structure that contains an integer, a text and a list_head structure. The integer is initialized with the index of the element and the text is initialized with a default value.
+I created code that creates a linked list of `x` elements at module installation and deletes it at module removal. Each element is a structure that contains an integer, a text, and a `list_head` structure. The integer is initialized with the element's index, and the text is initialized with a default value.
 
-Here the dsmeg result of my module installation/removal:
+Here is the `dmesg` result of my module's installation/removal:
 
 ```sh
 [   97.216060] Sylvan Module Loaded
@@ -187,7 +192,7 @@ Here the dsmeg result of my module installation/removal:
 
 == Exercise 5
 
-I started to request the memory regions I needed:
+I started by requesting the memory regions I needed:
 
 ```c
 	ressouces[0] = request_mem_region (0x01c14200, 0x10, "Chip ID");
@@ -195,7 +200,7 @@ I started to request the memory regions I needed:
 	ressouces[2] = request_mem_region (0x01c30050, 0x8, "MAC Address");
 ```
 
-But all these requests were failing. These memory regions seems to be already reserved. Thats what I found by running `cat /proc/iomem`:
+But all these requests were failing. These memory regions seem to be already reserved. That's what I found by running `cat /proc/iomem`:
 
 ```sh
 01c14000-01c143ff : 1c14000.eeprom eeprom@1c14000
@@ -203,9 +208,9 @@ But all these requests were failing. These memory regions seems to be already re
 01c30000-01c3ffff : 1c30000.ethernet ethernet@1c30000
 ```
 
-So I changed to code to read these registers without claiming them. I used `ioremap` to map the physical memory addresses to virtual addresses and then I read the values using `ioread32`.
+So, I changed the code to read these registers without claiming them. I used `ioremap` to map the physical memory addresses to virtual addresses, and then I read the values using `ioread32`.
 
-Here is the dmesg result:
+Here is the `dmesg` result:
 
 ```sh
 [  551.289950] Chip ID: 82800001'94004704'5036c304'0425090e
@@ -213,13 +218,13 @@ Here is the dmesg result:
 [  551.299132] MAC Address: 02:01:83:c6:1a:9b
 ```
 
-I controlled chip temperature with `cat /sys/class/thermal/thermal_zone0/temp` and also checked my MAC address with `ifconfig`. It matched the values read in the register.
+I controlled the chip temperature with `cat /sys/class/thermal/thermal_zone0/temp` and also checked my MAC address with `ifconfig`. It matched the values read in the register.
 
 == Exercise 6
 
 I created a thread in the module that prints a message every 5 seconds. I used `kthread_run` to create and run the thread and `kthread_stop` to stop it at module removal. The thread function is a simple loop that prints a message and sleeps for 5 seconds with `ssleep`.
 
-Here is the dmesg result of the installation and removal of the module:
+Here is the `dmesg` result of the installation and removal of the module:
 
 ```sh
 [ 3995.237292] Exercice 6 module loaded, reading registers...
@@ -237,9 +242,9 @@ Here is the dmesg result of the installation and removal of the module:
 
 == Exercise 7
 
-I used a waitqueue as requested in the instructions. At first I had some issue to understand how to use it, as I was confusing waitqueues with message queues. I created two threads, one that sleeps for 5 seconds and then wakes up the other thread using `wake_up_interruptible` function. The second thread is sleeping on the waitqueue using `wait_event_interruptible` function and is woken up by the first thread or if the module is being unloaded.
+I used a wait queue as requested in the instructions. At first, I had some issues understanding how to use it, as I was confusing wait queues with message queues. I created two threads: one that sleeps for 5 seconds and then wakes up the other thread using the `wake_up_interruptible` function. The second thread is sleeping on the wait queue using the `wait_event_interruptible` function and is woken up by the first thread or if the module is being unloaded.
 
-The dmesg result:
+The `dmesg` result:
 
 ```sh
 [ 1750.174073] Exercice 7 module loaded, reading registers...
@@ -255,11 +260,11 @@ The dmesg result:
 [ 1780.872832] Exercice 7 Module Unloaded, threads stopped
 ```
 
-== Exercise 8 <irq_Exercise>
+== Exercise 8 <irq-exercise>
 
-I created a single interupt handler for the 3 buttons. To distinguish the buttons I created an *enum* that represents the 3 buttons and I passed the corresponding value for each button. For an unknown reason my module failed to request irq for the button k1 (but it worked for k2 and k3). Maybe the pin id is wrong.
+I created a single interrupt handler for the three buttons. To distinguish the buttons, I created an *enum* that represents the three buttons and passed the corresponding value for each button.
 
-The dmesg result:
+The `dmesg` result:
 
 ```sh
 [10209.745763] Failed to request IRQ for GPIO 0
@@ -273,9 +278,9 @@ The dmesg result:
 
 == Exercise 1
 
-I didn't know how to create the Makefile for a memory mapped device driver so I analysed and used the one provided in the solution. I wrote some comments in the Makefile to explain what each part is doing.
+I didn't know how to create the Makefile for a memory-mapped device driver, so I analyzed and used the one provided in the solution. I wrote some comments in the Makefile to explain what each part is doing.
 
-Same for the main.c file. I didn't knew where to start as it was my first time writing a memory mapped device driver. I analysed and commented the solution to understand how it works.
+The same goes for the `main.c` file. I didn't know where to start, as it was my first time writing a memory-mapped device driver. I analyzed and commented on the solution to understand how it works.
 
 The result of the running app:
 
@@ -284,21 +289,21 @@ psz=1000, addr=1c14200, offset=1c14000, ofs=200
 NanoPi NEO Plus2 chipid=82800001'94004704'5036c304'0425090e
 ```
 
-The example makes me understand the importance of aligning the memory addresses to the page size when using `mmap` to map physical memory to user space.
+The example made me understand the importance of aligning memory addresses to the page size when using `mmap` to map physical memory to user space.
 
 == Exercise 2
 
-I created a character device driver based on the skeleton example in the course. I implemented the `open`, `release`, `read`and `write`functions.
+I created a character device driver based on the skeleton example in the course. I implemented the `open`, `release`, `read`, and `write` functions.
 
-The module has an internal `char*` pointer initialised with null value. When the user writes to the device, the pointer is allocated with `kmalloc` and the value is copied from user space to kernel space using `copy_from_user`. The old value is also freed using `kfree` before allocating the new one if it is not the first write. When the user reads from the device, the value is copied from kernel space to user space using `copy_to_user`.
+The module has an internal `char*` pointer initialized with a null value. When the user writes to the device, the pointer is allocated with `kmalloc`, and the value is copied from user space to kernel space using `copy_from_user`. The old value is also freed using `kfree` before allocating the new one if it is not the first write. When the user reads from the device, the value is copied from kernel space to user space using `copy_to_user`.
 
-I installed the module with `modprobe`, Inspected `dmesg` to check the major and minor numbers that were attributed:
+I installed the module with `modprobe` and inspected `dmesg` to check the major and minor numbers that were attributed:
 
 ```sh
 [  533.612204] skeleton: allocated char device region with major 511 and minor 0
 ```
 
-Then I created a device file with `mknod`:
+Then, I created a device file with `mknod`:
 
 ```sh
 mknod /dev/skeleton c 511 0
@@ -311,39 +316,39 @@ The result:
 crw-r--r-- 1 root root 511, 0 Jan  1 00:16 /dev/skeleton
 ```
 
-Then I tested the device with `echo` and `cat` commands:
+Then, I tested the device with the `echo` and `cat` commands:
 
 ```sh
 echo "Hello world" > /dev/skeleton
 cat /dev/skeleton
 ```
 
-It worked as expected. Event after multipl writes.
+It worked as expected, even after multiple writes.
 
 == Exercise 3
 
-To set the devices numbers I added a `device_n` module parameter with default value of 1 that user can change at load time. Then in the init function I used a loop that creates n devices.
+To set the device numbers, I added a `device_n` module parameter with a default value of 1 that the user can change at load time. Then, in the `init` function, I used a loop that creates `n` devices.
 
-I had to adapt previous code to handle multiple devices. To make things much simpler I defined a fixed buffer size that is created for each device at module initialization and freed once at module removal. 
+I had to adapt the previous code to handle multiple devices. To make things much simpler, I defined a fixed buffer size that is created for each device at module initialization and freed once at module removal.
 
-I also modified the code to directly create the device files in `/dev` using `device_create` function instead of creating them manually with `mknod`.
+I also modified the code to directly create the device files in `/dev` using the `device_create` function instead of creating them manually with `mknod`.
 
 == Exercise 4
 
-I created a rust program that interracts with the devices created in the previous exercise. Here are the commands I used to compile it for correct achitecture:
+I created a Rust program that interacts with the devices created in the previous exercise. Here are the commands I used to compile it for the correct architecture:
 
 ```sh
 rustup target add aarch64-unknown-linux-gnu
 export PATH=/buildroot/output/host/usr/bin:$PATH
 cargo build --release --target aarch64-unknown-linux-gnu
 ```
-Then I ran the program:
+Then, I ran the program:
 
 ```sh
 /workspace/src/03_drivers/exercise04/target/aarch64-unknown-linux-gnu/release/exercise04
 ```
 
-The program output: 
+The program's output:
 
 ```sh
 Opened all devices
@@ -354,13 +359,13 @@ Response from device 2: Hello, device 2
 
 == Exercise 5
 
-I created a simple class device with sysfs attributes. I struggled to understand where these &dev_attr_data and &dev_attr_cfg are coming from. I found out that they are created by the `DEVICE_ATTR` macro that we use.
+I created a simple class device with sysfs attributes. I struggled to understand where `&dev_attr_data` and `&dev_attr_cfg` were coming from. I found out that they are created by the `DEVICE_ATTR` macro that we use.
 
 == Exercise 5.1
 
-I added the chardevice file operations developped in exercise 2 to the module. Then I installed the module with modprobe and tested it.
+I added the character device file operations developed in Exercise 2 to the module. Then, I installed the module with `modprobe` and tested it.
 
-I Tested the character device:
+I tested the character device:
 
 ```sh
 ls -l /dev/ex5_device
@@ -368,7 +373,7 @@ echo "Hello world" > /dev/ex5_device
 cat /dev/ex5_device
 ```
 
-result:
+Result:
 
 ```sh
 crw-rw---- 1 root root 511,   0 Jan  1 01:10 ex5_sysfs_device
@@ -381,7 +386,7 @@ And the sysfs attributes:
 echo 77 | tee /sys/class/ex5_device_class/ex5_sysfs_device/sysfs_data
 cat /sys/class/ex5_device_class/ex5_sysfs_device/sysfs_data
 ```
-result:
+Result:
 
 ```sh
 77
@@ -392,7 +397,7 @@ echo "7 12345 demo cfg" | tee /sys/class/ex5_device_class/ex5_sysfs_device/cfg
 cat /sys/class/ex5_device_class/ex5_sysfs_device/cfg
 ```
 
-result:
+Result:
 
 ```sh
 7 12345 demo cfg
@@ -400,10 +405,12 @@ result:
 
 The driver works as expected. The character device and the sysfs attributes are working correctly.
 
+#pagebreak()
+
 == Exercise 7
 
-I used my @irq_Exercise solution as a basis for this execise.
+I used my @irq-exercise solution as a basis for this exercise.
 
-The driver caller has multiple options: he can call the read function in blocking mode and wait for an interrupt to be triggered, or he can call it in non-blocking mode and check if an interrupt has been triggered without waiting. He can use the poll function to wait for an interrupt to be triggered and be notified when it happens. I also exposed a sysfs attribute to reset the interrupt counter.
+The driver caller has multiple options: he can call the `read` function in blocking mode and wait for an interrupt to be triggered, or he can call it in non-blocking mode and check if an interrupt has been triggered without waiting. He can use the `poll` function to wait for an interrupt to be triggered and be notified when it happens. I also exposed a sysfs attribute to reset the interrupt counter.
 
-I devlopped a small rust app that tests the driver. It resets the interrupt counter, then call the poll function to wait for an interrupt to be triggered. When an interrupt is triggered, it reads the number of interrupts and add it to the total interrupts counter. It also prints the number of interrupts received from the driver and the total interrupts.
+I developed a small Rust app that tests the driver. It resets the interrupt counter, then calls the `poll` function to wait for an interrupt to be triggered. When an interrupt is triggered, it reads the number of interrupts and adds it to the total interrupts counter. It also prints the number of interrupts received from the driver and the total interrupts.
