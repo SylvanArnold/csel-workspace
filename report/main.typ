@@ -255,7 +255,7 @@ The dmesg result:
 [ 1780.872832] Exercice 7 Module Unloaded, threads stopped
 ```
 
-== Exercise 8
+== Exercise 8 <irq_Exercise>
 
 I created a single interupt handler for the 3 buttons. To distinguish the buttons I created an *enum* that represents the 3 buttons and I passed the corresponding value for each button. For an unknown reason my module failed to request irq for the button k1 (but it worked for k2 and k3). Maybe the pin id is wrong.
 
@@ -351,3 +351,55 @@ Response from device 0: Hello, device 0
 Response from device 1: Hello, device 1
 Response from device 2: Hello, device 2
 ```
+
+== Exercise 5
+
+I created a simple class device with sysfs attributes. I struggled to understand where these &dev_attr_data and &dev_attr_cfg are coming from. I found out that they are created by the `DEVICE_ATTR` macro that we use.
+
+== Exercise 5.1
+
+I added the chardevice file operations developped in exercise 2 to the module. Then I installed the module with modprobe and tested it.
+
+I Tested the character device:
+
+```sh
+ls -l /dev/ex5_device
+echo "Hello world" > /dev/ex5_device
+cat /dev/ex5_device
+```
+
+result:
+
+```sh
+crw-rw---- 1 root root 511,   0 Jan  1 01:10 ex5_sysfs_device
+Hello world
+```
+
+And the sysfs attributes:
+
+```sh
+echo 77 | tee /sys/class/ex5_device_class/ex5_sysfs_device/sysfs_data
+cat /sys/class/ex5_device_class/ex5_sysfs_device/sysfs_data
+```
+result:
+
+```sh
+77
+```
+
+```sh
+echo "7 12345 demo cfg" | tee /sys/class/ex5_device_class/ex5_sysfs_device/cfg
+cat /sys/class/ex5_device_class/ex5_sysfs_device/cfg
+```
+
+result:
+
+```sh
+7 12345 demo cfg
+```
+
+The driver works as expected. The character device and the sysfs attributes are working correctly.
+
+== Exercise 7
+
+I used my @irq_Exercise solution as a basis for this execise.

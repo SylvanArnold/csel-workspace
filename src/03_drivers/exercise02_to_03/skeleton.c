@@ -29,6 +29,7 @@ static int devices_number = 1; // default device number is 1, can be set at modu
 module_param(devices_number, int, 0);
 
 
+// called when the device file is opened, regarding the operation
 static int skeleton_open(struct inode* i, struct file* f)
 {
     int idx;
@@ -54,6 +55,7 @@ static int skeleton_open(struct inode* i, struct file* f)
     return 0;
 }
 
+// called when the device file is closed, regarding the operation
 static int skeleton_release(struct inode* i, struct file* f)
 {
     pr_info("skeleton: release operation...\n");
@@ -109,6 +111,7 @@ static ssize_t skeleton_write(struct file* f,const char __user* buf,size_t count
     return bytes_to_copy;
 }
 
+// define the file operations structure with pointers to our open, read, write and release functions
 static struct file_operations skeleton_fops = {
     .owner   = THIS_MODULE,
     .open    = skeleton_open,
@@ -116,6 +119,7 @@ static struct file_operations skeleton_fops = {
     .write   = skeleton_write,
     .release = skeleton_release,
 };
+
 
 static int __init skeleton_init(void)
 {
@@ -125,13 +129,14 @@ static int __init skeleton_init(void)
     if (devices_number <= 0)
         return -EINVAL;
 
-    
+    // allocate memory for the device structures and their internal buffers
     skeleton_devices = kmalloc_array(devices_number, sizeof(struct skeleton_device), GFP_KERNEL);
     if (!skeleton_devices){
         pr_err("skeleton: failed to allocate memory for devices\n");
         return -ENOMEM;
     }
 
+    // allocate memory for the internal buffers, one per device
     skeleton_buffers = kmalloc_array(devices_number, sizeof(char *), GFP_KERNEL);
     if (!skeleton_buffers) {
         pr_err("skeleton: failed to allocate memory for buffers\n");
@@ -140,6 +145,7 @@ static int __init skeleton_init(void)
         return -ENOMEM;
     }
 
+    // allocate a fixed-size buffer for each device and initialize it to an empty string
     for (i = 0; i < devices_number; i++) {
         skeleton_buffers[i] = kmalloc(SKELETON_BUFFER_SIZE, GFP_KERNEL);
         if (!skeleton_buffers[i]) {
@@ -155,7 +161,7 @@ static int __init skeleton_init(void)
         skeleton_buffers[i][0] = '\0';
     }
 
-    // allocate a char device region for all devices
+    // allocate a char device region for all devices with major and minor numbers
     status = alloc_chrdev_region(&skeleton_devices[0].dev_number, 0, devices_number, "skeleton");
     if (status < 0) {
         pr_err("skeleton: failed to allocate char device region\n");
@@ -168,6 +174,7 @@ static int __init skeleton_init(void)
         return status;
     }
 
+    // create a class in sysfs to be able to create device nodes in /dev
     skeleton_class = class_create(THIS_MODULE, "skeleton");
     if (IS_ERR(skeleton_class)) {
         status = PTR_ERR(skeleton_class);
@@ -182,6 +189,7 @@ static int __init skeleton_init(void)
         return status;
     }
 
+    // initialize each device, add it to the system and create a device node in /dev
     for (i = 0; i < devices_number; i++) { // initialize each device
         snprintf(skeleton_devices[i].name, sizeof(skeleton_devices[i].name), "skeleton%d", i); // set the device name
         skeleton_devices[i].dev_number = MKDEV(MAJOR(skeleton_devices[0].dev_number), MINOR(skeleton_devices[0].dev_number) + i); 
@@ -240,6 +248,7 @@ static void __exit skeleton_exit(void)
 {
     int i;
 
+    // remove the device nodes, delete the char devices, destroy the class and unregister the char device region
     if (skeleton_class && skeleton_devices) {
         for (i = 0; i < devices_number; i++)
             device_destroy(skeleton_class, skeleton_devices[i].dev_number);
