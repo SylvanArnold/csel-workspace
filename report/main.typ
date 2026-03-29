@@ -403,3 +403,7 @@ The driver works as expected. The character device and the sysfs attributes are 
 == Exercise 7
 
 I used my @irq_Exercise solution as a basis for this execise.
+
+The driver caller has multiple options: he can call the read function in blocking mode and wait for an interrupt to be triggered, or he can call it in non-blocking mode and check if an interrupt has been triggered without waiting. He can use the poll function to wait for an interrupt to be triggered and be notified when it happens. I also exposed a sysfs attribute to reset the interrupt counter.
+
+I devlopped a small rust app that tests the driver. It resets the interrupt counter, then call the poll function to wait for an interrupt to be triggered. When an interrupt is triggered, it reads the number of interrupts and add it to the total interrupts counter. It also prints the number of interrupts received from the driver and the total interrupts.
