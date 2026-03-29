@@ -1,17 +1,63 @@
-#import "@preview/red-agora:0.2.0": project
+#set page(margin: (x: 24mm, y: 20mm), numbering: "1")
+#set heading(numbering: "1.")
+#set text(size: 12pt)
+#show heading.where(level: 1): it => [
+  #pagebreak(weak: true)
+  #it
+]
 
-#show: project.with(
-  title: "Linux embedded systems",
-  subtitle: "Lab report",
-  authors: (
-    "Sylvan Arnold",
-  ),
-  school-logo: image("ressources/hesso-logo.svg"), // Replace with [] to remove the school logo
-  //company-logo: image("images/company.svg"),
-  branch: "Computer Science",
-  academic-year: "2026",
-  footer-text: "MA_CSEL1", // Text used in left side of the footer
-)
+#let custom-title-page(
+  title: "Linux Embedded Systems",
+  subtitle: "Lab Report",
+  student: "Sylvan Arnold",
+  program: "Computer Science",
+  class_name: "MA_CSEL1",
+  academic_year: "2026",
+  target_board: "FriendlyARM NanoPi NEO Plus2",
+  repository: "https://github.com/SylvanArnold/csel-workspace",
+) = [
+  #align(center, [
+    #image("ressources/hesso-logo.svg", width: 42mm)
+    #v(12mm)
+    #text(size: 33pt, weight: "bold", fill: rgb("#0f172a"))[#title]
+    #v(4mm)
+    #text(size: 16pt, fill: rgb("#334155"))[#subtitle]
+    #v(9mm)
+    #rect(width: 78%, height: 1pt, fill: rgb("#94a3b8"))
+  ])
+
+  #v(10mm)
+
+  #block(
+    fill: rgb("#f8fafc"),
+    stroke: 0.7pt + rgb("#cbd5e1"),
+    radius: 8pt,
+    inset: 14pt,
+  )[
+    #table(
+      columns: (35%, 65%),
+      stroke: none,
+      inset: (x: 6pt, y: 4pt),
+      [Project scope], [Buildroot image creation, kernel modules, and device drivers],
+      [Target board], [#target_board],
+      [Student], [#student],
+      [Program], [#program],
+      [Academic year], [#academic_year],
+      [Class], [#class_name],
+      [Repository], [#link(repository)[GitHub: csel-workspace]],
+    )
+  ]
+
+  #v(23mm)
+
+  #align(center, text(size: 10pt, fill: rgb("#64748b"))[
+    HES-SO // Spring 2026
+  ])
+
+  #pagebreak()
+]
+
+#custom-title-page()
 
 = Introduction
 
@@ -81,8 +127,6 @@ parm:           text:charp
 parm:           elements:int
 ```
 
-#pagebreak()
-
 === Install the module and check `dmesg`
 
 ```sh
@@ -149,8 +193,6 @@ The parameters are then displayed in `dmesg`:
 [ 4564.068128]   elements: 42
 ```
 
-#pagebreak()
-
 == Exercise 3
 
 ```sh
@@ -159,6 +201,8 @@ cat /proc/sys/kernel/printk
 ```
 
 This command displays the current settings of the `printk` function. The first value is the current log level, the second value is the default log level attributed to prints that do not specify it, the third value is the minimum log level allowed, and the fourth value is the default log level set at boot.
+
+#pagebreak()
 
 == Exercise 4
 
@@ -260,6 +304,8 @@ The `dmesg` result:
 [ 1780.872832] Exercice 7 Module Unloaded, threads stopped
 ```
 
+#pagebreak()
+
 == Exercise 8 <irq-exercise>
 
 I created a single interrupt handler for the three buttons. To distinguish the buttons, I created an *enum* that represents the three buttons and passed the corresponding value for each button.
@@ -325,6 +371,8 @@ cat /dev/skeleton
 
 It worked as expected, even after multiple writes.
 
+#pagebreak()
+
 == Exercise 3
 
 To set the device numbers, I added a `device_n` module parameter with a default value of 1 that the user can change at load time. Then, in the `init` function, I used a loop that creates `n` devices.
@@ -360,6 +408,8 @@ Response from device 2: Hello, device 2
 == Exercise 5
 
 I created a simple class device with sysfs attributes. I struggled to understand where `&dev_attr_data` and `&dev_attr_cfg` were coming from. I found out that they are created by the `DEVICE_ATTR` macro that we use.
+
+#pagebreak()
 
 == Exercise 5.1
 
@@ -404,8 +454,6 @@ Result:
 ```
 
 The driver works as expected. The character device and the sysfs attributes are working correctly.
-
-#pagebreak()
 
 == Exercise 7
 
