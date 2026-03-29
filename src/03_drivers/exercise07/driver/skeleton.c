@@ -14,6 +14,8 @@
 #include <linux/uaccess.h>
 
 #include <linux/miscdevice.h>
+#include <linux/sysfs.h>
+#include <linux/device.h>
 
 // Define the GPIO pins to use for the buttons
 #define K1 0
@@ -92,6 +94,22 @@ static ssize_t skeleton_read(struct file* f, char __user* buf,size_t sz,loff_t* 
 	return len;
 }
 
+static ssize_t nb_of_interrupts_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+    return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&nb_of_interrupts));
+}
+
+static ssize_t nb_of_interrupts_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+    int val;
+    if (kstrtoint(buf, 10, &val) == 0 && val == 0) {
+        atomic_set(&nb_of_interrupts, 0);
+    }
+    return count;
+}
+
+static DEVICE_ATTR_RW(nb_of_interrupts);
+
 static struct file_operations skeleton_fops = {
     .owner = THIS_MODULE,
     .read  = skeleton_read,
@@ -112,6 +130,13 @@ static int __init skeleton_init(void)
 	status = misc_register(&misc_device); // Register the misc device
 	if (status != 0) {
 		pr_err("Failed to register misc device\n");
+		return status;
+	}
+
+	status = device_create_file(misc_device.this_device, &dev_attr_nb_of_interrupts);
+	if (status != 0) {
+		pr_err("Failed to create sysfs file\n");
+		misc_deregister(&misc_device);
 		return status;
 	}
 
@@ -151,6 +176,7 @@ static int __init skeleton_init(void)
 
 static void __exit skeleton_exit(void)
 {
+	device_remove_file(misc_device.this_device, &dev_attr_nb_of_interrupts);
 	misc_deregister(&misc_device);
 
 	free_irq(gpio_to_irq(K1), (void*)K1_Switch);

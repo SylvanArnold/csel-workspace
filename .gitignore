@@ -1,6 +1,7 @@
 images
 buildroot-images
 src/*/app
+src/**/target
 .obj
 .deleted
 
