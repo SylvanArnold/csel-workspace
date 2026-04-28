@@ -462,3 +462,11 @@ I used my @irq-exercise solution as a basis for this exercise.
 The driver caller has multiple options: he can call the `read` function in blocking mode and wait for an interrupt to be triggered, or he can call it in non-blocking mode and check if an interrupt has been triggered without waiting. He can use the `poll` function to wait for an interrupt to be triggered and be notified when it happens. I also exposed a sysfs attribute to reset the interrupt counter.
 
 I developed a small Rust app that tests the driver. It resets the interrupt counter, then calls the `poll` function to wait for an interrupt to be triggered. When an interrupt is triggered, it reads the number of interrupts and adds it to the total interrupts counter. It also prints the number of interrupts received from the driver and the total interrupts.
+
+= File Systems
+
+I analysed the `silly_led_control.c` code. I understand why it consumes 100% of the CPU. Because it constantly reads the clock to count the time elapsed instead of using a timer and sleeping.
+
+Push buttons are connected to GPIO0, GPIO2, and GPIO3. I created an epoll instance and added the file descriptors of the buttons to it. Then, I used `epoll_wait` to wait for an event on any of the buttons. When an event is triggered, I read the button index from the event.
+
+TODO: MEASURE CPU USAGE OF NEW CODE AND COMPARE IT WITH THE OLD ONE.
