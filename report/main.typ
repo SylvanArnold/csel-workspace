@@ -465,8 +465,21 @@ I developed a small Rust app that tests the driver. It resets the interrupt coun
 
 = File Systems
 
-I analysed the `silly_led_control.c` code. I understand why it consumes 100% of the CPU. Because it constantly reads the clock to count the time elapsed instead of using a timer and sleeping.
+I analysed the `silly_led_control.c` code. I understand why it consumes 100% of the CPU. It is constantly reading the clock to count the time elapsed instead of using a timer and sleeping.
 
-Push buttons are connected to GPIO0, GPIO2, and GPIO3. I created an epoll instance and added the file descriptors of the buttons to it. Then, I used `epoll_wait` to wait for an event on any of the buttons. When an event is triggered, I read the button index from the event.
+In my implementation, push buttons are connected to GPIO0, GPIO2, and GPIO3. I created an epoll instance and added the buttons file descriptors to it. Then, I used `epoll_wait` to wait for an event on any of the buttons. When an event is triggered, I read the button index from the event.data field.
 
-TODO: MEASURE CPU USAGE OF NEW CODE AND COMPARE IT WITH THE OLD ONE.
+I separated my code into two threads: one for the buttons and one for the LED blinking. The button thread waits for an event on the buttons and updates the blink period accordingly. The LED thread blinks the LED with the current blink period using `timerfd`. The blink period is a shared variable between the two threads, so I protected it by a mutex. Updated blink period is printed in the console and sent to the syslog.
+
+I checked CPU usage of my implementation with `top` and it is maximum 1.3%.
+
+My /var/log/messages:
+
+```sh
+Jan  1 00:50:29 csel user.info better_led[261]: New period: 500 ms
+Jan  1 00:54:10 csel user.info better_led[261]: New period: 450 ms
+Jan  1 00:54:11 csel user.info better_led[261]: New period: 400 ms
+Jan  1 00:54:11 csel user.info better_led[261]: New period: 350 ms
+Jan  1 00:54:12 csel user.info better_led[261]: New period: 300 ms
+Jan  1 00:54:12 csel user.info better_led[261]: New period: 250 ms
+```
