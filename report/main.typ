@@ -483,3 +483,55 @@ Jan  1 00:54:11 csel user.info better_led[261]: New period: 350 ms
 Jan  1 00:54:12 csel user.info better_led[261]: New period: 300 ms
 Jan  1 00:54:12 csel user.info better_led[261]: New period: 250 ms
 ```
+
+= Multiprocessing and scheduling
+
+== Exercise 1
+
+I created a simple c program that creates a socket pair and then make a fork. Parent and child process each take one end of the socket pair. Parent take the cpu 0 and child the cpu 1 with `sched_setaffinity` call. Then they subscribe to SIGHUP, SIGINT, SIGQUIT, SIGABRT, SIGTERM  signals with a handler that simply print the signal received in the console.
+
+Then the child process sends a serie of messages to the parent that logs them. The final message is an exit message and then the child exits. The parent process waits for the child to exit and then it exits too.
+
+At first, I didn't understand that both parent and child continue execution from the point immediately after the fork() call.
+
+I runned the program and then in another terminal I sent a SIGINT signal to the parent process with `kill -SIGINT <parent_pid>`. The signal was ignored as expected:
+
+```sh
+Starting program
+[PID 264] Affinity pinned to core 0.
+[PARENT PID 264] Waiting for messages from child (PID 265)...
+
+[PID 265] Affinity pinned to core 1.
+[CHILD PID 265] Started on core 1.
+[CHILD PID 265] Message sent: "Hello from the child!"
+[PARENT PID 264] Message received: "Hello from the child!"
+[CHILD PID 265] Message sent: "How are you, parent?"
+[PARENT PID 264] Message received: "How are you, parent?"
+[CHILD PID 265] Message sent: "Bybye"
+[PARENT PID 264] Message received: "Bybye"
+[PID 264] Signal SIGINT received and ignored.
+[CHILD PID 265] Message sent: "exit"
+[PARENT PID 264] Message received: "exit"
+[CHILD PID 265] Terminated.
+
+[PARENT PID 264] "exit" message received — shutting down.
+[PARENT PID 264] Child exited (status 0). Goodbye!
+```
+
+== Exercise 2
+
+=== Question 1
+
+`echo $$ > ...` on a cgroup file adds the current process (the shell) to the targeted cgroup.
+
+
+
+=== Question 2
+
+When the memory limit is reached, the OOM killer is triggered and kill one or multiple processes in the cgroup to free memory.
+
+We can change this setting by disablind the OOM killer for the cgroup by writing `1` to the `memory.oom_control` file of the cgroup. In this case, when the memory limit is reached, the process that tries to allocate memory will receive an `ENOMEM` error instead of being killed.
+
+=== Question 3
+
+== Exercise 3
