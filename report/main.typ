@@ -520,6 +520,21 @@ Starting program
 
 == Exercise 2
 
+I created a small program that allocates 25Mb of memory and zeroes it. Then I created a cgroup with a 20Mb memory limit and added the current shell process to the cgroup. I runned the program:
+
+```sh
+./build/main
+Killed
+```
+
+The program was killed. Then I tried to allocate only 15Mb of memory:
+
+```sh
+./build/main
+Allocation SUCCESS (15728640 bytes)
+```
+The allocation succeeded, as expected.
+
 === Question 1
 
 `echo $$ > ...` on a cgroup file adds the current process (the shell) to the targeted cgroup.
@@ -533,5 +548,49 @@ When the memory limit is reached, the OOM killer is triggered and kill one or mu
 We can change this setting by disablind the OOM killer for the cgroup by writing `1` to the `memory.oom_control` file of the cgroup. In this case, when the memory limit is reached, the process that tries to allocate memory will receive an `ENOMEM` error instead of being killed.
 
 === Question 3
+
+You can use the `/sys/fs/cgroup/memory/memory.stat` file to monitor the memory usage of a cgroup:
+
+```sh
+# cat /sys/fs/cgroup/memory/mem/memory.stat
+cache 1118208
+rss 397312
+rss_huge 0
+shmem 0
+mapped_file 544768
+dirty 0
+writeback 0
+swap 0
+pgpgin 11939
+pgpgout 11562
+pgfault 10475
+pgmajfault 16
+inactive_anon 335872
+active_anon 4096
+inactive_file 1093632
+active_file 0
+unevictable 0
+hierarchical_memory_limit 20971520
+hierarchical_memsw_limit 9223372036854771712
+total_cache 1118208
+total_rss 397312
+total_rss_huge 0
+total_shmem 0
+total_mapped_file 544768
+total_dirty 0
+total_writeback 0
+total_swap 0
+total_pgpgin 11939
+total_pgpgout 11562
+total_pgfault 10475
+total_pgmajfault 16
+total_inactive_anon 335872
+total_active_anon 4096
+total_inactive_file 1093632
+total_active_file 0
+total_unevictable 0
+```
+
+Current rss memory usage is 0.39Mb and cache usage is 1.11Mb.
 
 == Exercise 3
