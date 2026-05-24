@@ -90,6 +90,8 @@ Starting program
 [PARENT PID 264] Child exited (status 0). Goodbye!
 ```
 
+#pagebreak()
+
 == Exercise 2
 
 I created a small program that allocates 25 MB of memory and zeroes it. Then I created a cgroup with a 20 MB memory limit and added the current shell process to the cgroup. I ran the program:
@@ -118,6 +120,8 @@ The allocation succeeded, as expected.
 When the memory limit is reached, the OOM killer is triggered and kills one or multiple processes in the cgroup to free memory.
 
 We can change this setting by disabling the OOM killer for the cgroup by writing `1` to the `memory.oom_control` file of the cgroup. In this case, when the memory limit is reached, the process that tries to allocate memory will receive an `ENOMEM` error instead of being killed.
+
+#pagebreak()
 
 === Question 3: cgroup memory usage monitoring
 
@@ -165,6 +169,8 @@ total_unevictable 0
 
 Current rss memory usage is 0.39Mb and cache usage is 1.11Mb. The result is coherent since no program is currently running in the cgroup.
 
+#pagebreak()
+
 == Exercise 3
 
 For this exercise I created a small c code that does a fork in the beginning and then enters in an infinite loop to consume all the CPU. Then I ran the provided commands to create the cgroups:
@@ -198,6 +204,8 @@ I opened 3 shells: one in the `high` group, one in the `low` group, and one to r
 
 
 We see that CPUs 2 and 3 are fully used by the running apps. Each app has two processes that take 50% of the CPU each, which is coherent since each app is doing a fork.
+
+#pagebreak()
 
 === Question 3: cpu repartition on two tasks
 
@@ -245,7 +253,7 @@ We see 4 processes running on CPU 3: two from the first group that take 12.5% of
 
 I've modified buildroot menuconfig to include binutils, rebuilt the image, updated the rootfs and rebuilt `perf` as asked in the instructions
 
-== Ex1 cache misses fix
+== Ex01 cache misses fix
 
 I ran the `perf stat ./ex1` command and got the following result:
 
@@ -281,6 +289,8 @@ Performance counter stats for './ex1':
     36.551646000 seconds user
       0.288202000 seconds sys
 ```
+
+#pagebreak()
 
 I analysed the code to understand why there are so many cache misses. The program is doing a column-wise access to a 2D array, which is not cache-friendly since the data is stored in row-wise order. So I inverted the `i` and `j` indexes in the access loop and got this result:
 
@@ -326,6 +336,8 @@ And with `perf stat ./ex1`:
 ```
 
 The execution time is slightly higher with `perf`, but the difference is not that big.
+
+#pagebreak()
 
 == Ex02 analysis and optimization
 
