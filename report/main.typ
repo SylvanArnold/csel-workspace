@@ -535,19 +535,19 @@ Allocation SUCCESS (15728640 bytes)
 ```
 The allocation succeeded, as expected.
 
-=== Question 1
+=== Question 1: echo $$ > effects
 
 `echo $$ > ...` on a cgroup file adds the current process (the shell) to the targeted cgroup.
 
 
 
-=== Question 2
+=== Question 2: memory limit reached effects
 
 When the memory limit is reached, the OOM killer is triggered and kill one or multiple processes in the cgroup to free memory.
 
 We can change this setting by disablind the OOM killer for the cgroup by writing `1` to the `memory.oom_control` file of the cgroup. In this case, when the memory limit is reached, the process that tries to allocate memory will receive an `ENOMEM` error instead of being killed.
 
-=== Question 3
+=== Question 3: cgroup memory usage monitoring
 
 You can use the `/sys/fs/cgroup/memory/memory.stat` file to monitor the memory usage of a cgroup:
 
@@ -591,6 +591,78 @@ total_active_file 0
 total_unevictable 0
 ```
 
-Current rss memory usage is 0.39Mb and cache usage is 1.11Mb.
+Current rss memory usage is 0.39Mb and cache usage is 1.11Mb. The result is coherent since no program is currently running in the cgroup.
 
 == Exercise 3
+
+For this exercise I created a small c code that does a fork in the beginning and then enters in an infinite loop to consume all the CPU. Then I ran the provided commands to create the cgroups:
+
+```sh
+mkdir /sys/fs/cgroup/cpuset
+mount -t cgroup -o cpu,cpuset cpuset /sys/fs/cgroup/cpuset
+mkdir /sys/fs/cgroup/cpuset/high
+mkdir /sys/fs/cgroup/cpuset/low
+echo 3 > /sys/fs/cgroup/cpuset/high/cpuset.cpus
+echo 0 > /sys/fs/cgroup/cpuset/high/cpuset.mems
+echo 2 > /sys/fs/cgroup/cpuset/low/cpuset.cpus
+echo 0 > /sys/fs/cgroup/cpuset/low/cpuset.mems
+```
+
+=== Question 1: four last lines usefullness
+
+The `high` and `low` groups that we created are subgroups of the parent cgroup. These subgroups do not inherit the CPU and memory configurations from the parent and must be initialized manually. If we don't do it, they will be considerated as invalid by the kernel because no resources are allocated to them.
+
+In our case, for the `high` group, we set CPU 3 and memory node 0. For the `low` group, we set CPU 2 and the same memory node as the high group.
+
+=== Question 2: start the app in the two groups
+
+
+I oppened 3 shells: one in the `high` group, one in the `low` group, and one to run the `htop` command to monitor the CPU usage. I ran the app in the `high` group and in the `low` group simultaneously. You can see the result in @fig:screenshot below:
+
+#figure(
+  image("ressources/images/05_ex03.png", width: 100%),
+  caption: [screenshot of running processes],
+) <fig:screenshot>
+
+
+We see that cpus 2 and 3 are fully used by the running apps. Each app has two processes that take 50% of the CPU each, which is coherent since each app is doing a fork.
+
+=== Question 3: cpu repartition on two tasks
+
+To have on the same cpu, one task using 25% and the other using 75% of the cpu, using cgroups, I did this:
+
+First, create two cgroups:
+
+```sh
+mkdir /sys/fs/cgroup/cpuset
+mount -t cgroup -o cpu,cpuset cpuset /sys/fs/cgroup/cpuset
+mkdir /sys/fs/cgroup/cpuset/group1
+mkdir /sys/fs/cgroup/cpuset/group2
+```
+
+Then set both groups on cpu 3 and memory node 0:
+
+```sh
+echo 3 > /sys/fs/cgroup/cpuset/group1/cpuset.cpus
+echo 0 > /sys/fs/cgroup/cpuset/group1/cpuset.mems
+echo 3 > /sys/fs/cgroup/cpuset/group2/cpuset.cpus
+echo 0 > /sys/fs/cgroup/cpuset/group2/cpuset.mems
+```
+
+Then, use the `cpu.shares` file to set the bandwidth for each group:
+
+```sh
+echo 256 > /sys/fs/cgroup/cpuset/group1/cpu.shares
+echo 768 > /sys/fs/cgroup/cpuset/group2/cpu.shares
+```
+
+(the values are relative to 1024)
+
+Finally I started my app in each group. You can see the result in @fig:cpu_repartition below:
+
+#figure(
+  image("ressources/images/05_ex03_2.png", width: 100%),
+  caption: [screenshot of cpu repartition],
+) <fig:cpu_repartition>
+
+We see 4 processes running on cpu 3: two from the first group that take 12.5% of the CPU each, and two from the second group that take 37.6% of the CPU each.
