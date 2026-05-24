@@ -809,3 +809,134 @@ We have far less branch misses and execution time is slighly better. The sorting
 
 == Logs Apache parsing
 
+I executed the perf record command and displayed the result with `perf report`. Here are the functions that consumes the most CPU with the extended call graph:
+
+```sh
+-   25.44%  read-apache-log  read-apache-logs       [.] std::operator==<char>                                                                              ▒
+     std::operator==<char>                                                                                                                                 ▒
+     __gnu_cxx::__ops::_Iter_equals_val<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const>::operator()<__gnu_cxx::__nor▒
+     std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11▒
+     std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11▒
+     std::find<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::bas▒
+     HostCounter::isNewHost                                                                                                                                ▒
+     HostCounter::notifyHost                                                                                                                               ▒
+     ApacheAccessLogAnalyzer::processFile                                                                                                                  ▒
+     main                                                                                                                                                  ▒
+     0xffff8b74835f                                                                                                                                        ▒
+     __libc_start_main                                                                                                                                     ♦
+     _start                                                                                                                                                ▒
+-   19.23%  read-apache-log  read-apache-logs       [.] __gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocato▒
+     __gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::basic_string<▒
+     std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11▒
+     std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11▒
+     std::find<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::bas▒
+     HostCounter::isNewHost                                                                                                                                ▒
+     HostCounter::notifyHost                                                                                                                               ▒
+     ApacheAccessLogAnalyzer::processFile                                                                                                                  ▒
+     main                                                                                                                                                  ▒
+     0xffff8b74835f                                                                                                                                        ▒
+     __libc_start_main                                                                                                                                     ▒
+     _start                                                                                                                                                ▒
+-   19.13%  read-apache-log  read-apache-logs       [.] __gnu_cxx::__ops::_Iter_equals_val<std::__cxx11::basic_string<char, std::char_traits<char>, std::al▒
+     __gnu_cxx::__ops::_Iter_equals_val<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const>::operator()<__gnu_cxx::__nor▒
+     std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11▒
+     std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11▒
+     std::find<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >*, std::vector<std::__cxx11::bas▒
+     HostCounter::isNewHost                                                                                                                                ▒
+     HostCounter::notifyHost                                                                                                                               ▒
+     ApacheAccessLogAnalyzer::processFile                                                                                                                  ▒
+     main                                                                                                                                                  ▒
+     0xffff8b74835f                                                                                                                                        ▒
+     __libc_start_main                                                                                                                                     ▒
+     _start                                                                                                                                                ▒
++    9.18%  read-apache-log  read-apache-logs       [.] __gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocato▒
++    9.02%  read-apache-log  read-apache-logs       [.] std::__find_if<__gnu_cxx::__normal_iterator<std::__cxx11::basic_string<char, std::char_traits<char>▒
++    5.06%  read-apache-log  read-apache-logs       [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::size@plt          ▒
++    5.02%  read-apache-log  libc.so.6              [.] memcmp                                                                                             ▒
+```
+
+I see that all these functions are related to the `isNewHost` function of the `HostCounter` class. This is the function to optimize.
+
+Here is the code of the `isNewHost` function:
+
+```cpp
+bool HostCounter::isNewHost(std::string hostname)
+{
+    return std::find(myHosts.begin(), myHosts.end(), hostname) == myHosts.end();
+}
+```
+
+This function is iterating over the entire hosts vector each time to check if the hostname is already in the vector or not. This is not efficient since the vector can grow a lot and we will have to iterate over it many times.
+
+I applied the suggested modifications in the instructions to use a `std::set` instead of a `std::vector` to store the hosts. The `std::set` is implemented as a balanced binary search tree, which allows for logarithmic time complexity for search operations. 
+
+After the optimization, I got this result:
+
+```sh
+Samples: 112  of event 'cpu-clock', Event count (approx.): 1493333296
+  Overhead  Command          Shared Object        Symbol
+-    8.04%  read-apache-log  libstdc++.so.6.0.29  [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::compare             ♦
+     std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::compare                                                              ▒
+     std::operator< <char, std::char_traits<char>, std::allocator<char> >                                                                                  ▒
+   + std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >::operator()                                               ▒
+-    5.36%  read-apache-log  read-apache-logs     [.] std::_Rb_tree<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::_▒
+   + std::_Rb_tree<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>▒
++    4.46%  read-apache-log  libc.so.6            [.] cfree                                                                                                ▒
++    4.46%  read-apache-log  libc.so.6            [.] memcmp                                                                                               ▒
++    4.46%  read-apache-log  libstdc++.so.6.0.29  [.] 0x00000000000d9fe8                                                                                   ▒
++    4.46%  read-apache-log  read-apache-logs     [.] std::_Rb_tree_node<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >:▒
++    4.46%  read-apache-log  read-apache-logs     [.] std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >::operator▒
++    4.46%  read-apache-log  read-apache-logs     [.] std::operator< <char, std::char_traits<char>, std::allocator<char> >                                 ▒
++    3.57%  read-apache-log  read-apache-logs     [.] std::_Rb_tree<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::_▒          ▒
+```
+
+The overall performance is now much better. But I had even better results when I used a `std::unordered_set` instead of a `std::set`:
+
+```sh
+Samples: 75  of event 'cpu-clock', Event count (approx.): 999999975
+  Overhead  Command          Shared Object          Symbol
++    6.67%  read-apache-log  libstdc++.so.6.0.29    [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::find_first_of
++    5.33%  read-apache-log  libc.so.6              [.] cfree
++    5.33%  read-apache-log  libstdc++.so.6.0.29    [.] memchr@plt
++    4.00%  read-apache-log  libc.so.6              [.] malloc
++    4.00%  read-apache-log  read-apache-logs       [.] std::__detail::_Hashtable_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocat
++    2.67%  read-apache-log  libc.so.6              [.] 0x0000000000079104
++    2.67%  read-apache-log  libc.so.6              [.] 0x0000000000085500
++    2.67%  read-apache-log  libc.so.6              [.] 0x000000000008552c
++    2.67%  read-apache-log  libstdc++.so.6.0.29    [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_construct<char*>
++    2.67%  read-apache-log  libstdc++.so.6.0.29    [.] 0x00000000000d9fe8
++    2.67%  read-apache-log  read-apache-logs       [.] std::__detail::_Hash_code_base<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocat
++    1.33%  read-apache-log  [kernel.kallsyms]      [k] el0_svc_common.constprop.0
++    1.33%  read-apache-log  [kernel.kallsyms]      [k] filemap_read
+```
+
+Finally I removed useless string cloning in the `isNewHost` and `notifyHost` functions and got this result:
+
+```sh
+Samples: 89  of event 'cpu-clock', Event count (approx.): 1186666637
+  Overhead  Command          Shared Object        Symbol
++    3.37%  read-apache-log  [kernel.kallsyms]    [k] __arch_copy_to_user                                                                                  ♦
++    3.37%  read-apache-log  [kernel.kallsyms]    [k] __do_softirq                                                                                         ▒
++    3.37%  read-apache-log  [kernel.kallsyms]    [k] _raw_spin_unlock_irqrestore                                                                          ▒
++    3.37%  read-apache-log  libstdc++.so.6.0.29  [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::find_first_of       ▒
++    3.37%  read-apache-log  libstdc++.so.6.0.29  [.] std::getline<char, std::char_traits<char>, std::allocator<char> >                                    ▒
++    3.37%  read-apache-log  libstdc++.so.6.0.29  [.] std::istream::sentry::sentry                                                                         ▒
++    3.37%  read-apache-log  read-apache-logs     [.] std::_Hashtable<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std:▒
++    2.25%  read-apache-log  libc.so.6            [.] malloc                                                                                               ▒
++    2.25%  read-apache-log  libc.so.6            [.] 0x0000000000085500                                                                                   ▒
++    2.25%  read-apache-log  libc.so.6            [.] 0x0000000000085510                                                                                   ▒
++    2.25%  read-apache-log  libstdc++.so.6.0.29  [.] memchr@plt                                                                                           ▒
++    2.25%  read-apache-log  libstdc++.so.6.0.29  [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::_M_create           ▒
++    2.25%  read-apache-log  libstdc++.so.6.0.29  [.] std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >::find_first_of       ▒
++    2.25%  read-apache-log  read-apache-logs     [.] HostCounter::isNewHost                                      
+```
+
+=== Question: how to measure interrupts latency and jitter     
+
+To have the best precision we can use a harware solution: we can use an oscilloscope to measure the time between the interrupt signal and the response signal. 
+
+On kernel space: we can create a small module that register an interrupt handler on a pin and toggle another pin when the interrupt is triggered. Then we can use an oscilloscope to measure the time between the interrupt signal and the response signal.
+
+On user space we can do the same operation with a small application that uses `poll` to wait for an interrupt and toggle a GPIO pin when the interrupt is triggered.
+
+To measure jitter, we do the measurement multiple times and calculate the standard deviation of the latency measurements.

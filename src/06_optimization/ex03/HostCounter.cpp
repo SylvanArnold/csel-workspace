@@ -6,17 +6,17 @@ HostCounter::HostCounter()
 {
 }
 
-bool HostCounter::isNewHost(std::string hostname)
+bool HostCounter::isNewHost(const std::string& hostname)
 {
-    return std::find(myHosts.begin(), myHosts.end(), hostname) == myHosts.end();
+    return myHosts.find(hostname) == myHosts.end();
 }
 
-void HostCounter::notifyHost(std::string hostname)
+void HostCounter::notifyHost(const std::string& hostname)
 {
     // add the host in the list if not already in
     if(isNewHost(hostname))
     {
-        myHosts.push_back(hostname);
+        myHosts.insert(hostname); 
     }
 }
 
