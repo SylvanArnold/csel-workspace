@@ -666,3 +666,146 @@ Finally I started my app in each group. You can see the result in @fig:cpu_repar
 ) <fig:cpu_repartition>
 
 We see 4 processes running on cpu 3: two from the first group that take 12.5% of the CPU each, and two from the second group that take 37.6% of the CPU each.
+
+= Performance Analysis and Optimization
+
+== Setup
+
+I've modified buildroot menuconfig to include binutils, rebuilt the image, updated the rootfs and rebuilt `perf`as asked in the instructions
+
+== Ex1 cache misses fix
+
+I ran the `perf stat ./ex1`command and get the following result:
+
+```sh
+Performance counter stats for './ex1':
+
+          37225.34 msec task-clock                #    0.999 CPUs utilized
+                20      context-switches          #    0.537 /sec
+                 0      cpu-migrations            #    0.000 /sec
+             48867      page-faults               #    1.313 K/sec
+       30375599323      cycles                    #    0.816 GHz
+        1667024369      instructions              #    0.05  insn per cycle
+         269096909      branches                  #    7.229 M/sec
+            996300      branch-misses             #    0.37% of all branches
+
+      37.252207351 seconds time elapsed
+
+      36.526202000 seconds user
+       0.323629000 seconds sys
+```
+
+The program took 37 seconds to finish. We see how much instructons were executed, how many cpu cycles it took, the context switches,... but we don't have informations about cache misses.
+
+I ran the `perf stat -e cache-misses ./ex1` command to get cache misses information:
+
+```sh
+Performance counter stats for './ex1':
+
+        406644166      cache-misses
+
+    37.308410143 seconds time elapsed
+
+    36.551646000 seconds user
+      0.288202000 seconds sys
+```
+
+I analysed the code to understand why there are so many cache misses. The program is doing a column-wise access to a 2D array, which is not cache-friendly since the data is stored in row-wise order. So I inversed the `i` and `j` indexes in the access loop and got this result:
+
+```sh
+ Performance counter stats for './ex1':
+
+           1213872      cache-misses
+
+       2.461410335 seconds time elapsed
+
+       2.170178000 seconds user
+       0.233748000 seconds sys
+```
+
+We see a huge performance improvement, with way less cache misses and lower execution time.
+
+== Describe capturable events
+
+instructions: counts the number of instructions executed by the program.
+caches-misses: counts the number of times the CPU failed to find data in the cache and had to fetch it from main memory.
+branch-misses: counts the number of times the CPU mispredicted a branch result, which decrease pipelining efficiency.
+L1-dcache-load-misses: counts the number of times the CPU failed to find data in the L1 data cache and had to fetch it from the next level of cache or main memory.
+cpu-migrations: counts the number of times a process was moved from one CPU to another, which can cause performance degradation
+context-switches: counts the number of times the CPU switched from one process or thread to another. Too many context switches adds overhead and decrease performance.
+
+== Measure perf inpact on program performance
+
+I ran `time ./ex1` and got this result:
+
+```sh
+real    0m 2.46s
+user    0m 2.19s
+sys     0m 0.21s
+```
+
+And with `perf stat ./ex1`:
+
+```sh
+2.541872792 seconds time elapsed
+
+2.216295000 seconds user
+0.252450000 seconds sys
+```
+
+The execution time is slightly higher with `perf`, but the difference is not that big.
+
+== Ex02 analysis and optimization
+
+This program fills an array with random values between 0 and 512. Then it sums all the values in the array that are below 256 threshold. And it does that 10000 times.
+
+As the values inside the array are not sorted, the branch predictor that predicts if the value is below the threshold or not will not be efficient, which will cause a lot of branch misses.
+
+Branch prediction enables the cpu to pre-load the next instructions in the pipeline, so when a branch is mispredicted, the pipeline has to be flushed and reloaded with the correct instructions, which causes a performance penalty.
+
+The result of `perf stat ./ex2` before optimization:
+
+```sh
+Performance counter stats for './ex2':
+
+        26174.85 msec task-clock                #    0.998 CPUs utilized
+              19      context-switches          #    0.726 /sec
+                0      cpu-migrations            #    0.000 /sec
+              75      page-faults               #    2.865 /sec
+      21358547563      cycles                    #    0.816 GHz
+      14768622436      instructions              #    0.69  insn per cycle
+        988535403      branches                  #   37.767 M/sec
+        327863164      branch-misses             #   33.17% of all branches
+
+    26.229924221 seconds time elapsed
+
+    26.120242000 seconds user
+      0.003976000 seconds sys
+```
+
+We have 33.17% of branch misses. To optimize the program, I used the provided sorting function that sorts the values in the array before summing them.
+
+The result after optimization:
+
+```sh
+Performance counter stats for './ex2':
+
+        23432.46 msec task-clock                #    0.998 CPUs utilized
+              20      context-switches          #    0.854 /sec
+                0      cpu-migrations            #    0.000 /sec
+              107      page-faults               #    4.566 /sec
+      19120754322      cycles                    #    0.816 GHz
+      14818352704      instructions              #    0.77  insn per cycle
+        997830308      branches                  #   42.583 M/sec
+          813078      branch-misses             #    0.08% of all branches
+
+    23.488982552 seconds time elapsed
+
+    23.383443000 seconds user
+      0.003990000 seconds sys
+```
+
+We have far less branch misses and execution time is slighly better. The sorting function take some time to execute but it is compensated by the fact that we do the sum 10000 times. If we did the sum only once, the optimization would not be efficient.
+
+== Logs Apache parsing
+
