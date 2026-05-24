@@ -500,3 +500,7 @@ In kernel space: we can create a small module that registers an interrupt handle
 In user space we can do the same operation with a small application that uses `poll` to wait for an interrupt and toggle a GPIO pin when the interrupt is triggered.
 
 To measure jitter, we do the measurement multiple times and calculate the standard deviation of the latency measurements.
+
+= Conclusion
+
+During this laboratory, I learnt a lot about how to monitor and optimize a linux sytem. I particularly appreciated the use of `perf`to analyze the performance of a program and identify optimization opportunities. I also found interesting the use of cgroups to allocate ressources to processes.
