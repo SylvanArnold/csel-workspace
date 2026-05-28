@@ -31,13 +31,13 @@
 
 = Introduction
 
-This is the second report of the Linux Embedded Systems course. In this document, I present my work on the exercises of the second part of the course, which covers file systems, multiprocessing and scheduling, and performance analysis and optimization.
+This is the second report of the Linux Embedded Systems course. In this document, I present my work on the exercises of the second part of the course, which covers file systems, multiprocessing and scheduling, performance analysis and optimization.
 
 The link to the repository with my solutions: `https://github.com/SylvanArnold/csel-workspace`
 
 = File Systems
 
-I analysed the `silly_led_control.c` code. I understand why it consumes 100% of the CPU. It is constantly reading the clock to count the time elapsed instead of using a timer and sleeping.
+I analysed the `silly_led_control.c` code. I understand why it consumes 100% of the CPU. It is constantly reading the clock to count the elapsed time instead of using a timer and sleeping.
 
 In my implementation, push buttons are connected to GPIO0, GPIO2, and GPIO3. I created an epoll instance and added the buttons file descriptors to it. Then, I used `epoll_wait` to wait for an event on any of the buttons. When an event is triggered, I read the button index from the event.data field.
 
@@ -367,7 +367,7 @@ Performance counter stats for './ex2':
       0.003976000 seconds sys
 ```
 
-We have 33.17% of branch misses. To optimize the program, I used the provided sorting function that sorts the values in the array before summing them.
+We have 33.17% of branch misses. To optimize the program, I used the provided sorting function  that sorts the values in the array before summing them.
 
 The result after optimization:
 
@@ -389,7 +389,7 @@ Performance counter stats for './ex2':
       0.003990000 seconds sys
 ```
 
-We have far fewer branch misses and execution time is slightly better. The sorting function takes some time to execute but it is compensated by the fact that we do the sum 10000 times. If we did the sum only once, the optimization would not be efficient.
+We have far fewer branch misses and execution time is slightly better. The sorting function takes some time to execute but it is compensated by the fact that we do the sum 10000 times. If we did the sum only once, this optimization would not be efficient.
 
 == Logs Apache parsing
 
@@ -473,7 +473,9 @@ Samples: 75  of event 'cpu-clock', Event count (approx.): 999999975
 + 1.33%  read-apache-log  [kernel.kallsyms]    [k] filemap_read
 ```
 
-Finally I removed useless string cloning in the `isNewHost` and `notifyHost` functions and got this result:
+#pagebreak()
+
+Finally, I removed useless string cloning in the `isNewHost` and `notifyHost` functions, by passing the strings by reference and got this result:
 
 ```sh
 Samples: 89  of event 'cpu-clock', Event count (approx.): 1186666637
@@ -495,12 +497,14 @@ Samples: 89  of event 'cpu-clock', Event count (approx.): 1186666637
 ```
 
 === Question: how to measure interrupt latency and jitter     
-To have the best precision, we can use a hardware solution: we can use an oscilloscope to measure the time between the interrupt signal and the response signal. 
-In kernel space: we can create a small module that registers an interrupt handler on a pin and toggles another pin when the interrupt is triggered. Then we can use an oscilloscope to measure the time between the interrupt signal and the response signal.
-In user space we can do the same operation with a small application that uses `poll` to wait for an interrupt and toggle a GPIO pin when the interrupt is triggered.
+To have the best precision, we can use a hardware solution: with an oscilloscope that measures the time between the interrupt signal and the response signal. 
+
+In kernel space, we can create a small module that registers an interrupt handler on a pin and toggles another pin when the interrupt is triggered. Then we can use an oscilloscope to measure the time between the interrupt signal and the response signal.
+
+In user space, we can do the same operation with a small application that uses `poll` to wait for an interrupt and toggle a GPIO pin when the interrupt is triggered.
 
 To measure jitter, we do the measurement multiple times and calculate the standard deviation of the latency measurements.
 
 = Conclusion
 
-During this laboratory, I learnt a lot about how to monitor and optimize a linux sytem. I particularly appreciated the use of `perf`to analyze the performance of a program and identify optimization opportunities. I also found interesting the use of cgroups to allocate ressources to processes.
+During this laboratory, I learnt a lot about how to monitor and optimize a linux sytem. I particularly appreciated the use of `perf` to analyze the performance of a program and identify optimization opportunities. I also found interesting the use of cgroups to allocate ressources to processes.
