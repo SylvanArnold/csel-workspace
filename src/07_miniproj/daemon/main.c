@@ -12,6 +12,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #define GPIO_EXPORT   "/sys/class/gpio/export"
 #define GPIO_UNEXPORT "/sys/class/gpio/unexport"
@@ -20,12 +21,16 @@
 #define BUTTON1_GPIO 0
 #define BUTTON2_GPIO 2
 #define BUTTON3_GPIO 3
+#define NUM_BUTTONS 3
+static const int BUTTON_GPIOS[NUM_BUTTONS] = { BUTTON1_GPIO, BUTTON2_GPIO, BUTTON3_GPIO };
+
 #define POWER_LED_GPIO 362
+
 
 #define SCREEN_REFRESH_INTERVAL_MS 5000
 
 static int led_fd;
-static int button_fds[3];
+static int button_fds[NUM_BUTTONS];
 static int screen_timer_fd;
 
 enum event_type {
@@ -41,7 +46,7 @@ struct event {
 };
 
 /* persistent epoll event storage */
-static struct event button_events[3];
+static struct event button_events[NUM_BUTTONS];
 static struct event timer_event;
 
 /* ---------------- GPIO INIT ---------------- */
@@ -58,14 +63,10 @@ static void gpios_init()
         snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
         write(f, value, strlen(value));
 
-        snprintf(value, sizeof(value), "%d", BUTTON1_GPIO);
-        write(f, value, strlen(value));
-
-        snprintf(value, sizeof(value), "%d", BUTTON2_GPIO);
-        write(f, value, strlen(value));
-
-        snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
-        write(f, value, strlen(value));
+        for (int i = 0; i < NUM_BUTTONS; i++) {
+            snprintf(value, sizeof(value), "%d", BUTTON_GPIOS[i]);
+            write(f, value, strlen(value));
+        }
 
         close(f);
     }
@@ -75,11 +76,10 @@ static void gpios_init()
         snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
         write(f, value, strlen(value));
 
-        snprintf(value, sizeof(value), "%d", BUTTON1_GPIO);
-        write(f, value, strlen(value));
-
-        snprintf(value, sizeof(value), "%d", BUTTON2_GPIO);
-        write(f, value, strlen(value));
+        for (int i = 0; i < NUM_BUTTONS; i++) {
+            snprintf(value, sizeof(value), "%d", BUTTON_GPIOS[i]);
+            write(f, value, strlen(value));
+        }
 
         snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
         write(f, value, strlen(value));
@@ -96,59 +96,30 @@ static void gpios_init()
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", POWER_LED_GPIO);
     led_fd = open(path, O_WRONLY);
 
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", BUTTON1_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "in", 2);
-        close(f);
+    // configure buttons
+    for (int i = 0; i < NUM_BUTTONS; i++) {
+        int gpio = BUTTON_GPIOS[i];
+
+        snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", gpio);
+        f = open(path, O_WRONLY);
+        if (f >= 0) {
+            write(f, "in", 2);
+            close(f);
+        }
+
+        snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", gpio);
+        f = open(path, O_WRONLY);
+        if (f >= 0) {
+            write(f, "both", 4);
+            close(f);
+        }
+
+        snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", gpio);
+        button_fds[i] = open(path, O_RDONLY | O_NONBLOCK);
     }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", BUTTON1_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "both", 4);
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", BUTTON1_GPIO);
-    button_fds[0] = open(path, O_RDONLY | O_NONBLOCK);
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", BUTTON2_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "in", 2);
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", BUTTON2_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "both", 4);
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", BUTTON2_GPIO);
-    button_fds[1] = open(path, O_RDONLY | O_NONBLOCK);
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", BUTTON3_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "in", 2);
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", BUTTON3_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "both", 4);
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", BUTTON3_GPIO);
-    button_fds[2] = open(path, O_RDONLY | O_NONBLOCK);
 
     /* clear initial state */
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < NUM_BUTTONS; i++) {
         char buf[8];
         lseek(button_fds[i], 0, SEEK_SET);
         read(button_fds[i], buf, sizeof(buf));
@@ -174,6 +145,22 @@ static int create_timer(int interval_ms)
     return tfd;
 }
 
+bool is_button_pressed(int fd)
+{
+    char buf[4];
+    lseek(fd, 0, SEEK_SET);
+    read(fd, buf, sizeof(buf));
+    return buf[0] == '1';
+}
+
+void set_led(bool on)
+{
+    if (led_fd >= 0) {
+        const char *val = on ? "1" : "0";
+        write(led_fd, val, 1);
+    }
+}
+
 /* ---------------- EVENT HANDLER ---------------- */
 
 int process_event(struct event ev)
@@ -182,34 +169,37 @@ int process_event(struct event ev)
 
     switch (ev.type) {
         case BUTTON1_PRESS:{
-            lseek(ev.fd, 0, SEEK_SET);
-                char buf[4];
-                read(ev.fd, buf, sizeof(buf));
-                if (buf[0] == '1')
-                    printf("Button 1 pressed\n");
-                else
-                    printf("Button 1 released\n");
-                break;
+            if (is_button_pressed(ev.fd)){
+                set_led(true);
+                printf("Button 1 pressed\n");
+            }
+            else {
+                set_led(false);
+                printf("Button 1 released\n");
+            }
+            break;
         }
         case BUTTON2_PRESS:{
-            lseek(ev.fd, 0, SEEK_SET);
-                char buf[4];
-                read(ev.fd, buf, sizeof(buf));
-                if (buf[0] == '1')
-                    printf("Button 2 pressed\n");
-                else
-                    printf("Button 2 released\n");
-                break;
+            if (is_button_pressed(ev.fd)) {
+                set_led(true);
+                printf("Button 2 pressed\n");
+            }
+            else {
+                set_led(false);
+                printf("Button 2 released\n");
+            }
+            break;
         }
         case BUTTON3_PRESS:{
-            lseek(ev.fd, 0, SEEK_SET);
-                char buf[4];
-                read(ev.fd, buf, sizeof(buf));
-                if (buf[0] == '1')
-                    printf("Button 3 pressed\n");
-                else
-                    printf("Button 3 released\n");
-                break;
+            if (is_button_pressed(ev.fd)){
+                set_led(true);
+                printf("Button 3 pressed\n");
+            }
+            else {
+                set_led(false);
+                printf("Button 3 released\n");
+            }
+            break;
         }
         case REFRESH_SCREEN: {
             printf("Refreshing screen (fd=%d)\n", ev.fd);
@@ -231,12 +221,6 @@ int process_event(struct event ev)
 int main()
 {
     gpios_init();
-
-    /*
-    ssd1306_init();
-    ssd1306_set_position(0,0);
-    ssd1306_puts("CSEL1a - SP.07");
-    */
 
     int epoll_fd = epoll_create1(0);
     struct epoll_event events[10];
