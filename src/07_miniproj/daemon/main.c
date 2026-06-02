@@ -14,6 +14,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#define FAN_MANUAL_MODE "/sys/devices/platform/fan-controller/manual_mode"
+#define FAN_FREQUENCY   "/sys/devices/platform/fan-controller/frequency"
+
 #define GPIO_EXPORT   "/sys/class/gpio/export"
 #define GPIO_UNEXPORT "/sys/class/gpio/unexport"
 #define GPIO_DIR      "/sys/class/gpio"
@@ -27,11 +30,18 @@ static const int BUTTON_GPIOS[NUM_BUTTONS] = { BUTTON1_GPIO, BUTTON2_GPIO, BUTTO
 #define POWER_LED_GPIO 362
 
 
-#define SCREEN_REFRESH_INTERVAL_MS 5000
+#define SCREEN_REFRESH_INTERVAL_MS 100
+#define FAN_FREQUENCY_MAX 100
+#define FAN_FREQUENCY_MIN 1
+#define FAN_FREQUENCY_STEP 1
 
 static int led_fd;
 static int button_fds[NUM_BUTTONS];
 static int screen_timer_fd;
+
+static bool fan_manual_mode = false;
+static int fan_manual_fd;
+static int fan_freq_fd;
 
 enum event_type {
     BUTTON1_PRESS,
@@ -126,6 +136,97 @@ static void gpios_init()
     }
 }
 
+static void fan_init()
+{
+    fan_manual_fd = open(FAN_MANUAL_MODE, O_RDWR);
+    fan_freq_fd = open(FAN_FREQUENCY, O_RDWR);
+
+    char buf[20];
+    read(fan_manual_fd, buf, 1);
+    fan_manual_mode = (buf[0] == '1');
+}
+
+static void fan_toggle_mode()
+{
+    fan_manual_mode = !fan_manual_mode;
+    const char *val = fan_manual_mode ? "1" : "0";
+    write(fan_manual_fd, val, 1);
+}
+
+static void fan_set_frequency(int freq)
+{
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%d", freq);
+    write(fan_freq_fd, buf, strlen(buf));
+}
+
+int fan_read_frequency()
+{
+    char buf[20] = {0};
+
+    lseek(fan_freq_fd, 0, SEEK_SET);
+
+    ssize_t n = read(fan_freq_fd, buf, sizeof(buf)-1);
+    if (n < 0) {
+        perror("read frequency");
+        return -1;
+    }
+
+    return atoi(buf);
+}
+
+static void fan_increase_frequency()
+{
+    int freq = fan_read_frequency();
+    freq += FAN_FREQUENCY_STEP;
+    if (freq > FAN_FREQUENCY_MAX) freq = FAN_FREQUENCY_MAX;
+    fan_set_frequency(freq);
+}
+
+static void fan_decrease_frequency()
+{
+    int freq = fan_read_frequency();
+    freq -= FAN_FREQUENCY_STEP;
+    if (freq < FAN_FREQUENCY_MIN) freq = FAN_FREQUENCY_MIN;
+    fan_set_frequency(freq);
+}
+
+static void screen_init()
+{
+    ssd1306_init();
+    ssd1306_clear_display();
+    ssd1306_set_position (0,0);
+    ssd1306_puts("CSEL1a - SP.07");
+    ssd1306_set_position (0,1);
+    ssd1306_puts("  Demo - SW");
+    ssd1306_set_position (0,2);
+    ssd1306_puts("--------------");
+    ssd1306_set_position (0,3);
+    ssd1306_puts("Mode: Unknown");
+    ssd1306_set_position (0,4);
+    ssd1306_puts("--------------");
+    ssd1306_set_position (0,5);
+    ssd1306_puts("Temp: xx'C");
+    ssd1306_set_position (0,6);
+    ssd1306_puts("Freq: xxHz");
+}
+
+static void screen_refresh()
+{
+    // read fan frequency and update display
+    char buf[20] = {0};
+    lseek(fan_freq_fd, 0, SEEK_SET);
+    read(fan_freq_fd, buf, sizeof(buf)-1);
+
+    ssd1306_set_position (0,3);
+    ssd1306_puts("Mode: ");
+    ssd1306_puts(fan_manual_mode ? "Manual " : "Auto   ");
+
+    ssd1306_set_position (0,6);
+    ssd1306_puts("Freq: ");
+    ssd1306_puts(buf);
+}
+
 /* ---------------- TIMER ---------------- */
 
 static int create_timer(int interval_ms)
@@ -165,13 +266,15 @@ void set_led(bool on)
 
 int process_event(struct event ev)
 {
-    char buf[4];
-
     switch (ev.type) {
         case BUTTON1_PRESS:{
             if (is_button_pressed(ev.fd)){
                 set_led(true);
                 printf("Button 1 pressed\n");
+                if (fan_manual_mode) {
+                    fan_increase_frequency();
+                    printf("Fan frequency increased\n");
+                }
             }
             else {
                 set_led(false);
@@ -183,6 +286,10 @@ int process_event(struct event ev)
             if (is_button_pressed(ev.fd)) {
                 set_led(true);
                 printf("Button 2 pressed\n");
+                if (fan_manual_mode) {
+                    fan_decrease_frequency();
+                    printf("Fan frequency decreased\n");
+                }
             }
             else {
                 set_led(false);
@@ -194,6 +301,7 @@ int process_event(struct event ev)
             if (is_button_pressed(ev.fd)){
                 set_led(true);
                 printf("Button 3 pressed\n");
+                fan_toggle_mode();
             }
             else {
                 set_led(false);
@@ -203,9 +311,9 @@ int process_event(struct event ev)
         }
         case REFRESH_SCREEN: {
             printf("Refreshing screen (fd=%d)\n", ev.fd);
-
             uint64_t expirations;
             read(screen_timer_fd, &expirations, sizeof(expirations));
+            screen_refresh();
             break;
         }
 
@@ -221,6 +329,8 @@ int process_event(struct event ev)
 int main()
 {
     gpios_init();
+    fan_init();
+    screen_init();
 
     int epoll_fd = epoll_create1(0);
     struct epoll_event events[10];
