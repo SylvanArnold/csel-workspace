@@ -67,7 +67,9 @@ I added the following node to the device tree:
     };
 ```
 
-It connects the module to the Power led pin of the board since we don't have a real fan to control.
+This node connects the module to the Status led pin of the board since we don't have a real fan to control.
+
+I had to rebuild my image on buildroot to apply the changes to the device tree.
 
 I created two sysfs entries to control the fan: `manual_mode`, which allows to switch between manual and automatic mode, and `frequency`, which allows to set the frequency of the fan in manual mode and read the current frequency in automatic mode.
 
@@ -76,5 +78,17 @@ In automatic mode, the frequency is set according to the CPU temperature, which 
 I built and installed the module on the board and everything works as expected.
 
 = Daemon
+
+The daemon uses the screen and power leds. I had to add the following nodes to the device tree to use them:
+
+```
+/ {
+    /delete-node/ leds;
+};
+
+&i2c0 {
+        status = "okay";
+};
+```
 
 = User Space Application
