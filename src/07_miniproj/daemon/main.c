@@ -15,7 +15,8 @@
 
 #define GPIO_EXPORT   "/sys/class/gpio/export"
 #define GPIO_UNEXPORT "/sys/class/gpio/unexport"
-#define GPIO_DIR     "/sys/class/gpio"
+#define GPIO_DIR      "/sys/class/gpio"
+
 #define BUTTON1_GPIO 0
 #define BUTTON2_GPIO 2
 #define BUTTON3_GPIO 3
@@ -27,7 +28,6 @@ static int led_fd;
 static int button_fds[3];
 static int screen_timer_fd;
 
-// Event types handled by the daemon
 enum event_type {
     BUTTON1_PRESS,
     BUTTON2_PRESS,
@@ -35,101 +35,133 @@ enum event_type {
     REFRESH_SCREEN,
 };
 
-/*
-    Configure all GPIOS and open file decriptors
-*/
-static void gpios_init(){
+struct event {
+    enum event_type type;
+    int fd;
+};
+
+/* persistent epoll event storage */
+static struct event button_events[3];
+static struct event timer_event;
+
+/* ---------------- GPIO INIT ---------------- */
+
+static void gpios_init()
+{
     syslog(LOG_INFO, "Initializing GPIOs");
+
     char path[64];
     char value[16];
-    int len;
-    // unexport pins out of sysfs (reinitialization)
+
     int f = open(GPIO_UNEXPORT, O_WRONLY);
-    len = snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
-    write(f, value, "write unexport power led");
-    len = snprintf(value, sizeof(value), "%d", BUTTON1_GPIO);
-    write(f, value, "write unexport button1");
-    len = snprintf(value, sizeof(value), "%d", BUTTON2_GPIO);
-    write(f, value, "write unexport button2");
-    len = snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
-    write(f, value, "write unexport button3");
-    close(f);
+    if (f >= 0) {
+        snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
+        write(f, value, strlen(value));
 
-    // export pins to sysfs
+        snprintf(value, sizeof(value), "%d", BUTTON1_GPIO);
+        write(f, value, strlen(value));
+
+        snprintf(value, sizeof(value), "%d", BUTTON2_GPIO);
+        write(f, value, strlen(value));
+
+        snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
+        write(f, value, strlen(value));
+
+        close(f);
+    }
+
     f = open(GPIO_EXPORT, O_WRONLY);
-    len = snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
-    write(f, value, "write export power led");
-    len = snprintf(value, sizeof(value), "%d", BUTTON1_GPIO);
-    write(f, value, "write export button1");
-    len = snprintf(value, sizeof(value), "%d", BUTTON2_GPIO);
-    write(f, value, "write export button2");
-    len = snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
-    write(f, value, "write export button3");
-    close(f);
+    if (f >= 0) {
+        snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
+        write(f, value, strlen(value));
 
-    // Configure pins directions and open file descriptors
+        snprintf(value, sizeof(value), "%d", BUTTON1_GPIO);
+        write(f, value, strlen(value));
+
+        snprintf(value, sizeof(value), "%d", BUTTON2_GPIO);
+        write(f, value, strlen(value));
+
+        snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
+        write(f, value, strlen(value));
+        close(f);
+    }
+
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", POWER_LED_GPIO);
-    f = open(path, O_WRONLY, "open power led direction");
-    write(f, "out", "write power led direction");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "out", 3);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", POWER_LED_GPIO);
-    led_fd = open(path, O_WRONLY, "open power led value");
+    led_fd = open(path, O_WRONLY);
+
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", BUTTON1_GPIO);
-    f = open(path, O_WRONLY, "open button1 direction");
-    write(f, "in", "write button1 direction");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "in", 2);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", BUTTON1_GPIO);
-    f = open(path, O_WRONLY, "open button1 edge");
-    write(f, "both", "write button1 edge");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "both", 4);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", BUTTON1_GPIO);
-    button_fds[0] = open(path, O_RDONLY | O_NONBLOCK, "open button1 value");
+    button_fds[0] = open(path, O_RDONLY | O_NONBLOCK);
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", BUTTON2_GPIO);
-    f = open(path, O_WRONLY, "open button2 direction");
-    write(f, "in", "write button2 direction");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "in", 2);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", BUTTON2_GPIO);
-    f = open(path, O_WRONLY, "open button2 edge");
-    write(f, "both", "write button2 edge");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "both", 4);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", BUTTON2_GPIO);
-    button_fds[1] = open(path, O_RDONLY | O_NONBLOCK, "open button2 value");
+    button_fds[1] = open(path, O_RDONLY | O_NONBLOCK);
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", BUTTON3_GPIO);
-    f = open(path, O_WRONLY, "open button3 direction");
-    write(f, "in", "write button3 direction");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "in", 2);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", BUTTON3_GPIO);
-    f = open(path, O_WRONLY, "open button3 edge");
-    write(f, "both", "write button3 edge");
-    close(f);
+    f = open(path, O_WRONLY);
+    if (f >= 0) {
+        write(f, "both", 4);
+        close(f);
+    }
 
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", BUTTON3_GPIO);
-    button_fds[2] = open(path, O_RDONLY | O_NONBLOCK, "open button3 value");
+    button_fds[2] = open(path, O_RDONLY | O_NONBLOCK);
 
+    /* clear initial state */
     for (int i = 0; i < 3; i++) {
         char buf[8];
         lseek(button_fds[i], 0, SEEK_SET);
         read(button_fds[i], buf, sizeof(buf));
     }
-
-    return;
 }
 
-// Function to create and configure a timerfd
+/* ---------------- TIMER ---------------- */
+
 static int create_timer(int interval_ms)
 {
     int tfd = timerfd_create(CLOCK_MONOTONIC, 0);
 
     struct itimerspec spec = {
-        // Fire immediately, then use the steady interval.
         .it_value.tv_sec = 0,
         .it_value.tv_nsec = 1,
         .it_interval = {
@@ -142,93 +174,99 @@ static int create_timer(int interval_ms)
     return tfd;
 }
 
+/* ---------------- EVENT HANDLER ---------------- */
 
+int process_event(struct event ev)
+{
+    char buf[4];
 
-int process_event(enum event_type event) {
-    switch (event) {
-        case BUTTON1_PRESS: {
-            printf("Button 1 pressed\n");
-            break;
+    switch (ev.type) {
+        case BUTTON1_PRESS:{
+            lseek(ev.fd, 0, SEEK_SET);
+                char buf[4];
+                read(ev.fd, buf, sizeof(buf));
+                if (buf[0] == '1')
+                    printf("Button 1 pressed\n");
+                else
+                    printf("Button 1 released\n");
+                break;
         }
         case BUTTON2_PRESS:{
-            printf("Button 2 pressed\n");
-            break;
+            lseek(ev.fd, 0, SEEK_SET);
+                char buf[4];
+                read(ev.fd, buf, sizeof(buf));
+                if (buf[0] == '1')
+                    printf("Button 2 pressed\n");
+                else
+                    printf("Button 2 released\n");
+                break;
         }
-        case BUTTON3_PRESS: {
-            printf("Button 3 pressed\n");
+        case BUTTON3_PRESS:{
+            lseek(ev.fd, 0, SEEK_SET);
+                char buf[4];
+                read(ev.fd, buf, sizeof(buf));
+                if (buf[0] == '1')
+                    printf("Button 3 pressed\n");
+                else
+                    printf("Button 3 released\n");
+                break;
         }
-            break;
-        case REFRESH_SCREEN:{
-            printf("Refreshing screen\n");
-            uint64_t expirations = 0;
-            // Clear timerfd readiness so epoll doesn't retrigger immediately.
+        case REFRESH_SCREEN: {
+            printf("Refreshing screen (fd=%d)\n", ev.fd);
+
+            uint64_t expirations;
             read(screen_timer_fd, &expirations, sizeof(expirations));
             break;
         }
+
         default:
-            return -EINVAL; // Invalid event type
+            return -EINVAL;
     }
-    return 0; // Success
+
+    return 0;
 }
 
+/* ---------------- MAIN ---------------- */
 
 int main()
 {
     gpios_init();
+
     /*
     ssd1306_init();
-
-    ssd1306_set_position (0,0);
+    ssd1306_set_position(0,0);
     ssd1306_puts("CSEL1a - SP.07");
-    ssd1306_set_position (0,1);
-    ssd1306_puts("  Demo - SW");
-    ssd1306_set_position (0,2);
-    ssd1306_puts("--------------");
-
-    ssd1306_set_position (0,3);
-    ssd1306_puts("Temp: 35'C");
-    ssd1306_set_position (0,4);
-    ssd1306_puts("Freq: 1Hz");
-    ssd1306_set_position (0,5);
-    ssd1306_puts("Duty: 50%");
     */
 
-    int epoll_fd = epoll_create1(0); // Create epoll instance
-    struct epoll_event events[10]; // Events buffer
+    int epoll_fd = epoll_create1(0);
+    struct epoll_event events[10];
+
     screen_timer_fd = create_timer(SCREEN_REFRESH_INTERVAL_MS);
 
-    // Configure epoll events for buttons and timer
-    struct epoll_event button1_press = {
-        .events = EPOLLPRI | EPOLLET, 
-        .data.u32 = BUTTON1_PRESS, 
-    };
-    struct epoll_event button2_press = {
-        .events = EPOLLPRI | EPOLLET, 
-        .data.u32 = BUTTON2_PRESS, 
-    };
-    struct epoll_event button3_press = {
-        .events = EPOLLPRI | EPOLLET, 
-        .data.u32 = BUTTON3_PRESS, 
-    };
-    struct epoll_event refresh_screen = {
-        .events = EPOLLIN, 
-        .data.u32 = REFRESH_SCREEN,
-    };
+    button_events[0] = (struct event){ .type = BUTTON1_PRESS, .fd = button_fds[0] };
+    button_events[1] = (struct event){ .type = BUTTON2_PRESS, .fd = button_fds[1] };
+    button_events[2] = (struct event){ .type = BUTTON3_PRESS, .fd = button_fds[2] };
 
-    // Add button file descriptors and timerfd to epoll instance
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[0], &button1_press);
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[1], &button2_press);
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[2], &button3_press);
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, screen_timer_fd, &refresh_screen);
+    timer_event = (struct event){ .type = REFRESH_SCREEN, .fd = screen_timer_fd };
+
+    struct epoll_event ev1 = { .events = EPOLLPRI, .data.ptr = &button_events[0] };
+    struct epoll_event ev2 = { .events = EPOLLPRI, .data.ptr = &button_events[1] };
+    struct epoll_event ev3 = { .events = EPOLLPRI, .data.ptr = &button_events[2] };
+    struct epoll_event evt = { .events = EPOLLIN,  .data.ptr = &timer_event };
+
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[0], &ev1);
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[1], &ev2);
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[2], &ev3);
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, screen_timer_fd, &evt);
 
     while (1) {
-        int n = epoll_wait(epoll_fd, events, 10, -1); // Wait for events
+        int n = epoll_wait(epoll_fd, events, 10, -1);
+
         for (int i = 0; i < n; i++) {
-            process_event(events[i].data.u32); // Process each event
+            struct event *ev = (struct event *)events[i].data.ptr;
+            process_event(*ev);
         }
     }
+
     return 0;
 }
-
-
-
