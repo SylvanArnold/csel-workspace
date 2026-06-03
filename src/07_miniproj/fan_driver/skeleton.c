@@ -149,12 +149,29 @@ static ssize_t frequency_store(struct device *dev,
 	return count;
 }
 
+// Read-only attribute to show current CPU temperature in millidegrees Celsius
+static ssize_t cpu_temp_show(struct device *dev,
+                             struct device_attribute *attr, char *buf)
+{
+	struct fan_ctrl *fc = dev_get_drvdata(dev);
+	s32 temp_mc = 0;
+	int ret;
+
+	ret = thermal_zone_get_temp(fc->tz, &temp_mc);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to read cpu temperature\n");
+
+	return sysfs_emit(buf, "%d\n", temp_mc);
+}
+
+static DEVICE_ATTR_RO(cpu_temp);
 static DEVICE_ATTR_RW(manual_mode);
 static DEVICE_ATTR_RW(frequency);
 
 static struct attribute *fan_attrs[] = {
 	&dev_attr_manual_mode.attr,
 	&dev_attr_frequency.attr,
+	&dev_attr_cpu_temp.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(fan);

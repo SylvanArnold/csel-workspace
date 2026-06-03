@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -16,6 +17,7 @@
 
 #define FAN_MANUAL_MODE "/sys/devices/platform/fan-controller/manual_mode"
 #define FAN_FREQUENCY   "/sys/devices/platform/fan-controller/frequency"
+#define FAN_CPU_TEMP "/sys/devices/platform/fan-controller/cpu_temp"
 
 #define GPIO_EXPORT   "/sys/class/gpio/export"
 #define GPIO_UNEXPORT "/sys/class/gpio/unexport"
@@ -42,6 +44,7 @@ static int screen_timer_fd;
 static bool fan_manual_mode = false;
 static int fan_manual_fd;
 static int fan_freq_fd;
+static int fan_temp_fd;
 
 enum event_type {
     BUTTON1_PRESS,
@@ -140,6 +143,7 @@ static void fan_init()
 {
     fan_manual_fd = open(FAN_MANUAL_MODE, O_RDWR);
     fan_freq_fd = open(FAN_FREQUENCY, O_RDWR);
+    fan_temp_fd   = open(FAN_CPU_TEMP,    O_RDONLY);
 
     char buf[20];
     read(fan_manual_fd, buf, 1);
@@ -213,18 +217,31 @@ static void screen_init()
 
 static void screen_refresh()
 {
-    // read fan frequency and update display
-    char buf[20] = {0};
+    char freq_buf[20] = {0};
     lseek(fan_freq_fd, 0, SEEK_SET);
-    read(fan_freq_fd, buf, sizeof(buf)-1);
+    read(fan_freq_fd, freq_buf, sizeof(freq_buf) - 1);
 
-    ssd1306_set_position (0,3);
-    ssd1306_puts("Mode: ");
-    ssd1306_puts(fan_manual_mode ? "Manual " : "Auto   ");
+    ssd1306_set_position(0, 3);
+    ssd1306_puts(fan_manual_mode ? "Mode: Manual " : "Mode: Auto   ");
 
-    ssd1306_set_position (0,6);
+    // Read cpu_temp (milli-Celsius) and convert to whole degrees
+    char temp_buf[20] = {0};
+    lseek(fan_temp_fd, 0, SEEK_SET);
+    ssize_t n = read(fan_temp_fd, temp_buf, sizeof(temp_buf) - 1);
+    
+    ssd1306_set_position(0, 5);
+    if (n > 0) {
+        int temp_mc = atoi(temp_buf);
+        char display[20];
+        snprintf(display, sizeof(display), "Temp: %d'C  ", temp_mc / 1000);
+        ssd1306_puts(display);
+    } else {
+        ssd1306_puts("Temp: --'C  ");
+    }
+
+    ssd1306_set_position(0, 6);
     ssd1306_puts("Freq: ");
-    ssd1306_puts(buf);
+    ssd1306_puts(freq_buf);
 }
 
 /* ---------------- TIMER ---------------- */
@@ -270,47 +287,38 @@ int process_event(struct event ev)
         case BUTTON1_PRESS:{
             if (is_button_pressed(ev.fd)){
                 set_led(true);
-                printf("Button 1 pressed\n");
                 if (fan_manual_mode) {
                     fan_increase_frequency();
-                    printf("Fan frequency increased\n");
                 }
             }
             else {
                 set_led(false);
-                printf("Button 1 released\n");
             }
             break;
         }
         case BUTTON2_PRESS:{
             if (is_button_pressed(ev.fd)) {
                 set_led(true);
-                printf("Button 2 pressed\n");
                 if (fan_manual_mode) {
                     fan_decrease_frequency();
-                    printf("Fan frequency decreased\n");
                 }
             }
             else {
                 set_led(false);
-                printf("Button 2 released\n");
             }
             break;
         }
         case BUTTON3_PRESS:{
             if (is_button_pressed(ev.fd)){
                 set_led(true);
-                printf("Button 3 pressed\n");
                 fan_toggle_mode();
             }
             else {
                 set_led(false);
-                printf("Button 3 released\n");
             }
             break;
         }
         case REFRESH_SCREEN: {
-            printf("Refreshing screen (fd=%d)\n", ev.fd);
             uint64_t expirations;
             read(screen_timer_fd, &expirations, sizeof(expirations));
             screen_refresh();
@@ -324,10 +332,64 @@ int process_event(struct event ev)
     return 0;
 }
 
+static void daemonize(void)
+{
+    pid_t pid;
+
+    // Fork and let the parent exit, detaching from the terminal 
+    pid = fork();
+    if (pid < 0) {
+        syslog(LOG_ERR, "fork failed: %m");
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0)
+        exit(EXIT_SUCCESS);
+
+    // Become session leader, detaching from the controlling terminal 
+    if (setsid() < 0) {
+        syslog(LOG_ERR, "setsid failed: %m");
+        exit(EXIT_FAILURE);
+    }
+
+    // Fork again so the daemon can never reacquire a controlling terminal 
+    pid = fork();
+    if (pid < 0) {
+        syslog(LOG_ERR, "second fork failed: %m");
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0)
+        exit(EXIT_SUCCESS);
+
+    // Set a neutral working directory so we don't hold a mount point open 
+    if (chdir("/") < 0) {
+        syslog(LOG_ERR, "chdir failed: %m");
+        exit(EXIT_FAILURE);
+    }
+
+    // Clear the file creation mask 
+    umask(0);
+
+    // Redirect stdin/stdout/stderr to /dev/null 
+    int devnull = open("/dev/null", O_RDWR);
+    if (devnull < 0) {
+        syslog(LOG_ERR, "open /dev/null failed: %m");
+        exit(EXIT_FAILURE);
+    }
+    dup2(devnull, STDIN_FILENO);
+    dup2(devnull, STDOUT_FILENO);
+    dup2(devnull, STDERR_FILENO);
+    if (devnull > STDERR_FILENO)
+        close(devnull);
+}
+
 /* ---------------- MAIN ---------------- */
 
 int main()
 {
+    openlog("fan-daemon", LOG_PID | LOG_NDELAY, LOG_DAEMON);
+
+    //daemonize();
+
     gpios_init();
     fan_init();
     screen_init();
