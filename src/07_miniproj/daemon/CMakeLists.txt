@@ -25,4 +25,5 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mcpu=cortex-a53 -funwind-tables")
 add_executable(fan_daemon
     main.c
     ssd1306.c
+    fan.c
 )

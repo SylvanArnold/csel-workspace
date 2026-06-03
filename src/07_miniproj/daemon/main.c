@@ -15,9 +15,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#define FAN_MANUAL_MODE "/sys/devices/platform/fan-controller/manual_mode"
-#define FAN_FREQUENCY   "/sys/devices/platform/fan-controller/frequency"
-#define FAN_CPU_TEMP "/sys/devices/platform/fan-controller/cpu_temp"
+#include "fan.h"
 
 #define GPIO_EXPORT   "/sys/class/gpio/export"
 #define GPIO_UNEXPORT "/sys/class/gpio/unexport"
@@ -33,18 +31,10 @@ static const int BUTTON_GPIOS[NUM_BUTTONS] = { BUTTON1_GPIO, BUTTON2_GPIO, BUTTO
 
 
 #define SCREEN_REFRESH_INTERVAL_MS 100
-#define FAN_FREQUENCY_MAX 100
-#define FAN_FREQUENCY_MIN 1
-#define FAN_FREQUENCY_STEP 1
 
 static int led_fd;
 static int button_fds[NUM_BUTTONS];
 static int screen_timer_fd;
-
-static bool fan_manual_mode = false;
-static int fan_manual_fd;
-static int fan_freq_fd;
-static int fan_temp_fd;
 
 enum event_type {
     BUTTON1_PRESS,
@@ -139,62 +129,6 @@ static void gpios_init()
     }
 }
 
-static void fan_init()
-{
-    fan_manual_fd = open(FAN_MANUAL_MODE, O_RDWR);
-    fan_freq_fd = open(FAN_FREQUENCY, O_RDWR);
-    fan_temp_fd   = open(FAN_CPU_TEMP,    O_RDONLY);
-
-    char buf[20];
-    read(fan_manual_fd, buf, 1);
-    fan_manual_mode = (buf[0] == '1');
-}
-
-static void fan_toggle_mode()
-{
-    fan_manual_mode = !fan_manual_mode;
-    const char *val = fan_manual_mode ? "1" : "0";
-    write(fan_manual_fd, val, 1);
-}
-
-static void fan_set_frequency(int freq)
-{
-    char buf[20];
-    snprintf(buf, sizeof(buf), "%d", freq);
-    write(fan_freq_fd, buf, strlen(buf));
-}
-
-int fan_read_frequency()
-{
-    char buf[20] = {0};
-
-    lseek(fan_freq_fd, 0, SEEK_SET);
-
-    ssize_t n = read(fan_freq_fd, buf, sizeof(buf)-1);
-    if (n < 0) {
-        perror("read frequency");
-        return -1;
-    }
-
-    return atoi(buf);
-}
-
-static void fan_increase_frequency()
-{
-    int freq = fan_read_frequency();
-    freq += FAN_FREQUENCY_STEP;
-    if (freq > FAN_FREQUENCY_MAX) freq = FAN_FREQUENCY_MAX;
-    fan_set_frequency(freq);
-}
-
-static void fan_decrease_frequency()
-{
-    int freq = fan_read_frequency();
-    freq -= FAN_FREQUENCY_STEP;
-    if (freq < FAN_FREQUENCY_MIN) freq = FAN_FREQUENCY_MIN;
-    fan_set_frequency(freq);
-}
-
 static void screen_init()
 {
     ssd1306_init();
@@ -217,21 +151,15 @@ static void screen_init()
 
 static void screen_refresh()
 {
-    char freq_buf[20] = {0};
-    lseek(fan_freq_fd, 0, SEEK_SET);
-    read(fan_freq_fd, freq_buf, sizeof(freq_buf) - 1);
+    int freq = fan_read_frequency();
+    int temp_mc = fan_get_cpu_temp();
+    bool manual = fan_is_manual_mode();
 
     ssd1306_set_position(0, 3);
-    ssd1306_puts(fan_manual_mode ? "Mode: Manual " : "Mode: Auto   ");
-
-    // Read cpu_temp (milli-Celsius) and convert to whole degrees
-    char temp_buf[20] = {0};
-    lseek(fan_temp_fd, 0, SEEK_SET);
-    ssize_t n = read(fan_temp_fd, temp_buf, sizeof(temp_buf) - 1);
+    ssd1306_puts(manual ? "Mode: Manual " : "Mode: Auto   ");
     
     ssd1306_set_position(0, 5);
-    if (n > 0) {
-        int temp_mc = atoi(temp_buf);
+    if (temp_mc >= 0) {
         char display[20];
         snprintf(display, sizeof(display), "Temp: %d'C  ", temp_mc / 1000);
         ssd1306_puts(display);
@@ -241,6 +169,8 @@ static void screen_refresh()
 
     ssd1306_set_position(0, 6);
     ssd1306_puts("Freq: ");
+    char freq_buf[20];
+    snprintf(freq_buf, sizeof(freq_buf), "%dHz", freq);
     ssd1306_puts(freq_buf);
 }
 
@@ -287,7 +217,7 @@ int process_event(struct event ev)
         case BUTTON1_PRESS:{
             if (is_button_pressed(ev.fd)){
                 set_led(true);
-                if (fan_manual_mode) {
+                if (fan_is_manual_mode()) {
                     fan_increase_frequency();
                 }
             }
@@ -299,7 +229,7 @@ int process_event(struct event ev)
         case BUTTON2_PRESS:{
             if (is_button_pressed(ev.fd)) {
                 set_led(true);
-                if (fan_manual_mode) {
+                if (fan_is_manual_mode()) {
                     fan_decrease_frequency();
                 }
             }
