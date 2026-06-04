@@ -1,3 +1,9 @@
+/**
+ * @file    fan_socket.h
+ * @brief   Socket handler for fan controller daemon
+ * @author  Sylvan Arnold
+ */
+
 #ifndef FAN_SOCKET_H
 #define FAN_SOCKET_H
 

@@ -1,3 +1,9 @@
+/**
+ * @file    gpios.h
+ * @brief   GPIO control interface for the fan controller daemon
+ * @author  Sylvan Arnold
+ */
+
 #ifndef GPIOS_H
 #define GPIOS_H
 

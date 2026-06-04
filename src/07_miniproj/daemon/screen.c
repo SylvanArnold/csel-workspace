@@ -24,6 +24,7 @@ void screen_init()
     ssd1306_puts("Freq: xxHz");
 }
 
+// Refresh the screen with current fan data
 void screen_refresh()
 {
     int freq = fan_read_frequency();

@@ -1,3 +1,8 @@
+/**
+ * @file    main.c
+ * @brief   Daemon process for controlling the fan and screen, handling button events and socket communication. Event driven architecture using epoll.
+ * @author  Sylvan Arnold
+ */
 #include "ssd1306.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -215,7 +220,7 @@ int main()
 {
     openlog("fan-daemon", LOG_PID | LOG_NDELAY, LOG_DAEMON);
 
-    //daemonize();
+    daemonize();
 
     /* Initialize events subsystems and create events*/
     gpios_fd_t *gpios = gpios_init();

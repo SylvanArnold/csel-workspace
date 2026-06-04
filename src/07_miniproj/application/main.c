@@ -1,3 +1,9 @@
+/**
+ * @file    main.c
+ * @brief   Fan control client application that communicates with the fan control daemon via a UNIX domain socket.
+ * @author  Sylvan Arnold
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

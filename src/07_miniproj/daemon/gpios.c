@@ -7,12 +7,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+// Contain all file descriptors for the GPIOs
 static gpios_fd_t gpios = {
     .led_fd = -1,
     .button_fds = {-1, -1, -1},
 };
-
-/* ---------------- GPIO INIT ---------------- */
 
 gpios_fd_t* gpios_init()
 {
@@ -56,6 +55,7 @@ gpios_fd_t* gpios_init()
         close(f);
     }
 
+    // open LED value file for writing
     snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", POWER_LED_GPIO);
     gpios.led_fd = open(path, O_WRONLY);
 
@@ -63,6 +63,7 @@ gpios_fd_t* gpios_init()
     for (int i = 0; i < NUM_BUTTONS; i++) {
         int gpio = BUTTON_GPIOS[i];
 
+        // set direction to input
         snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", gpio);
         f = open(path, O_WRONLY);
         if (f >= 0) {
@@ -70,6 +71,7 @@ gpios_fd_t* gpios_init()
             close(f);
         }
 
+        // configure edge detection for both rising and falling edges
         snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", gpio);
         f = open(path, O_WRONLY);
         if (f >= 0) {
@@ -77,6 +79,7 @@ gpios_fd_t* gpios_init()
             close(f);
         }
 
+        // open value file for non-blocking read
         snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", gpio);
         gpios.button_fds[i] = open(path, O_RDONLY | O_NONBLOCK);
     }

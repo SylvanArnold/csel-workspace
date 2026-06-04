@@ -1,3 +1,9 @@
+/**
+ * @file    fan_socket.h
+ * @brief   Defines the socket communication protocol for the fan controller.
+ * @author  Sylvan Arnold
+ */
+
 #pragma once
 
 #include <stdint.h>

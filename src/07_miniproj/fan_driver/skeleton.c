@@ -1,4 +1,8 @@
-// fan_controller.c
+/**
+ * @file    skeleton.c
+ * @brief   Fan driver module that controls a fan based on CPU temperature. Supports both automatic and manual modes via sysfs attributes.
+ * @author  Sylvan Arnold
+ */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
@@ -39,6 +43,7 @@ static u32 temp_to_freq(s32 temp_mc) {
 	return 20;
 }
 
+// Timer callback to toggle the fan GPIO based on current frequency and mode
 static void fan_toggle_timer(struct timer_list *t) {
 	struct fan_ctrl *fc = from_timer(fc, t, timer);
 	u32  freq;
@@ -164,6 +169,7 @@ static ssize_t cpu_temp_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", temp_mc);
 }
 
+// Define sysfs attributes and groups
 static DEVICE_ATTR_RO(cpu_temp);
 static DEVICE_ATTR_RW(manual_mode);
 static DEVICE_ATTR_RW(frequency);
@@ -192,6 +198,7 @@ static int fan_ctrl_probe(struct platform_device *pdev)
 	fc->dev = dev;
 	spin_lock_init(&fc->lock);
 
+	// Get GPIO from device tree
 	fc->gpio_pin = of_get_named_gpio(np, "fan-gpios", 0);
 	if (!gpio_is_valid(fc->gpio_pin))
 		return dev_err_probe(dev, -EINVAL, "invalid fan GPIO\n");
@@ -207,6 +214,7 @@ static int fan_ctrl_probe(struct platform_device *pdev)
 				     "failed to set GPIO as output\n");
 	}
 
+	// Get thermal zone for CPU temperature
 	fc->tz = thermal_zone_get_zone_by_name("cpu-thermal");
 	if (IS_ERR(fc->tz)) {
 		gpio_free(fc->gpio_pin);
@@ -234,6 +242,7 @@ static int fan_ctrl_probe(struct platform_device *pdev)
 	return 0;
 }
 
+// Clean up resources on module removal
 static int fan_ctrl_remove(struct platform_device *pdev)
 {
 	struct fan_ctrl *fc = platform_get_drvdata(pdev);

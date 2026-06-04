@@ -1,3 +1,9 @@
+/**
+ * @file    fan.h
+ * @brief   Fan control interface for the fan controller daemon
+ * @author  Sylvan Arnold
+ */
+
 #ifndef FAN_H
 #define FAN_H
 

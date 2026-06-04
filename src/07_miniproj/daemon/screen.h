@@ -1,3 +1,9 @@
+/**
+ * @file    screen.h
+ * @brief   Screen control interface for the fan controller daemon
+ * @author  Sylvan Arnold
+ */
+
 #ifndef SCREEN_H
 #define SCREEN_H
 
