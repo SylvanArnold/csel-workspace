@@ -28,4 +28,5 @@ add_executable(fan_daemon
     fan.c
     screen.c
     gpios.c
+    socket.c
 )
