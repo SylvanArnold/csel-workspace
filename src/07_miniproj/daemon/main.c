@@ -48,8 +48,6 @@ static struct event socket_event;
 static struct event client_events[MAX_SOCKET_CLIENTS]; // list of client events indexed by their fd
 static int client_event_count = 0;
 
-
-
 /* ---------------- TIMER ---------------- */
 
 static int create_timer(int interval_ms)
@@ -158,6 +156,8 @@ int process_event(struct event ev)
 
     return 0;
 }
+
+/* ---------------- DAEMONIZE ---------------- */
 
 static void daemonize(void)
 {
