@@ -7,8 +7,8 @@
   academic_year: "2026",
   repository: "https://github.com/SylvanArnold/csel-workspace",
 ) = [
+  #align(right,[#image("ressources/hesso-logo.svg", width: 42mm)]),
   #align(center, [
-    #image("ressources/hesso-logo.svg", width: 42mm)
     #v(12mm)
     #text(size: 33pt, weight: "bold", fill: rgb("#0f172a"))[#title]
     #v(4mm)
@@ -48,6 +48,42 @@
 
 #custom-title-page()
 
+#set page(margin: (x: 24mm, y: 20mm), numbering: "1")
+#set heading(numbering: "1.")
+#set text(size: 12pt)
+#show heading.where(level: 1): it => [
+	#v(8pt)
+	#it
+	#v(10pt)
+]
+#show heading.where(level: 2): it => [
+	#v(6pt)
+	#it
+	#v(6pt)
+]
+#show heading.where(level: 3): it => [
+	#v(4pt)
+	#it
+	#v(4pt)
+]
+
+#show raw.where(block: true): it => block(
+	fill: rgb("#f1f5f9"),
+	stroke: rgb("#e2e8f0"),
+	radius: 4pt,
+	inset: 8pt,
+)[
+	#it
+]
+
+#show raw.where(block: false): it => box(
+  fill: rgb("#eff6ff"),
+  inset: (x: 3pt, y: 1pt),
+  radius: 2pt,
+)[
+  #it
+]
+
 = Introduction
 
 I implemented a complete fan control solution for a Linux embedded system.
@@ -58,12 +94,14 @@ The project consists of:
 - A user-space daemon that displays fan data on a screen, listens for button inputs to configure the fan module, and exposes a Unix socket.
 - A user-space application that connects to the daemon through the Unix socket to read data and configure the fan module.
 
+Github repository: `https://github.com/SylvanArnold/csel-workspace`
+
 Project structure:
 
-- `src/07_miniproj/fan_driver`: Kernel module for fan control
-- `src/07_miniproj/daemon`: User-space daemon for screen and LED control
-- `src/07_miniproj/application`: User-space application for interacting with the fan controller
-- `src/07_miniproj/common/fan_socket.h`: Socket communication definitions shared between the daemon and the application
+- *src/07_miniproj/fan_driver*: Kernel module for fan control
+- *src/07_miniproj/daemon*: User-space daemon for screen and LED control
+- *src/07_miniproj/application*: User-space application for interacting with the fan controller
+- *src/07_miniproj/common/fan_socket.h*: Socket communication definitions shared between the daemon and the application
 
 = Kernel Module
 
@@ -71,7 +109,7 @@ I created an installable kernel module using `module_platform_driver`, which can
 
 The following node must be added to the device tree:
 
-```dts
+```json
 fan-controller {
     compatible = "vendor,fan-controller";
     fan-gpios = <&pio 0 10 GPIO_ACTIVE_HIGH>;
@@ -89,11 +127,13 @@ I created three sysfs entries: `manual_mode`, `frequency`, and `temperature`.
 
 In automatic mode, the fan frequency is adjusted according to the CPU temperature, which is read from the `cpu-thermal` thermal zone. As requested in the project requirements, I implemented a simple lookup table to map temperature ranges to fan frequencies.
 
+#pagebreak()
+
 = Daemon
 
 The daemon uses the screen and the power LEDs. To enable I²C communication for screen control, the following node must be added to the device tree:
 
-```dts
+```json
 &i2c0 {
     status = "okay";
 };
@@ -121,7 +161,11 @@ The user-space application connects to the daemon through the Unix socket and se
 
 The application is intentionally simple and serves primarily as a demonstration of how external programs can interact with the daemon.
 
+#pagebreak()
+
 = Conclusion
+
+== Summary 
 
 The solution worked as expected. Implementing the entire system in a single thread was challenging, but it was satisfying to discover how effectively `epoll` can be used for unified event handling in Linux.
 
@@ -129,6 +173,6 @@ Another challenge was selecting the appropriate Linux APIs on the module develop
 
 Overall, this project provided an excellent opportunity to apply the main concepts covered during the semester. It was a great preparation for the final exam.
 
-= Improvements
+== Improvements
 
 If I had more time, I would integrate the solution into my Buildroot configuration so that it would be included directly in the system image. This would allow the kernel module and the daemon to be installed and started automatically at boot, without any manual steps.
