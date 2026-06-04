@@ -1,4 +1,5 @@
 #ifndef FAN_H
+#define FAN_H
 
 #include <stdbool.h>
 
@@ -17,5 +18,6 @@ int fan_read_frequency();
 void fan_increase_frequency();
 void fan_decrease_frequency();
 bool fan_is_manual_mode();
+int fan_get_cpu_temp();
 
 #endif 

@@ -26,4 +26,6 @@ add_executable(fan_daemon
     main.c
     ssd1306.c
     fan.c
+    screen.c
+    gpios.c
 )

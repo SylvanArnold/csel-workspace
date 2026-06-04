@@ -5,9 +5,9 @@
 #include <unistd.h>
 
 static bool fan_manual_mode = false;
-static int fan_manual_fd;
-static int fan_freq_fd;
-static int fan_temp_fd;
+static int fan_manual_fd = -1;
+static int fan_freq_fd = -1;
+static int fan_temp_fd = -1;
 
 void fan_init()
 {

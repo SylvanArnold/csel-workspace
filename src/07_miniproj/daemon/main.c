@@ -16,31 +16,20 @@
 #include <stdbool.h>
 
 #include "fan.h"
-
-#define GPIO_EXPORT   "/sys/class/gpio/export"
-#define GPIO_UNEXPORT "/sys/class/gpio/unexport"
-#define GPIO_DIR      "/sys/class/gpio"
-
-#define BUTTON1_GPIO 0
-#define BUTTON2_GPIO 2
-#define BUTTON3_GPIO 3
-#define NUM_BUTTONS 3
-static const int BUTTON_GPIOS[NUM_BUTTONS] = { BUTTON1_GPIO, BUTTON2_GPIO, BUTTON3_GPIO };
-
-#define POWER_LED_GPIO 362
-
+#include "screen.h"
+#include "gpios.h"
 
 #define SCREEN_REFRESH_INTERVAL_MS 100
 
-static int led_fd;
-static int button_fds[NUM_BUTTONS];
-static int screen_timer_fd;
+static int screen_timer_fd = -1;
 
 enum event_type {
     BUTTON1_PRESS,
     BUTTON2_PRESS,
     BUTTON3_PRESS,
     REFRESH_SCREEN,
+    SOCKET_ACCEPT_CLIENT,
+    SOCKET_CLIENT_REQUEST,
 };
 
 struct event {
@@ -52,127 +41,6 @@ struct event {
 static struct event button_events[NUM_BUTTONS];
 static struct event timer_event;
 
-/* ---------------- GPIO INIT ---------------- */
-
-static void gpios_init()
-{
-    syslog(LOG_INFO, "Initializing GPIOs");
-
-    char path[64];
-    char value[16];
-
-    int f = open(GPIO_UNEXPORT, O_WRONLY);
-    if (f >= 0) {
-        snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
-        write(f, value, strlen(value));
-
-        for (int i = 0; i < NUM_BUTTONS; i++) {
-            snprintf(value, sizeof(value), "%d", BUTTON_GPIOS[i]);
-            write(f, value, strlen(value));
-        }
-
-        close(f);
-    }
-
-    f = open(GPIO_EXPORT, O_WRONLY);
-    if (f >= 0) {
-        snprintf(value, sizeof(value), "%d", POWER_LED_GPIO);
-        write(f, value, strlen(value));
-
-        for (int i = 0; i < NUM_BUTTONS; i++) {
-            snprintf(value, sizeof(value), "%d", BUTTON_GPIOS[i]);
-            write(f, value, strlen(value));
-        }
-
-        snprintf(value, sizeof(value), "%d", BUTTON3_GPIO);
-        write(f, value, strlen(value));
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", POWER_LED_GPIO);
-    f = open(path, O_WRONLY);
-    if (f >= 0) {
-        write(f, "out", 3);
-        close(f);
-    }
-
-    snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", POWER_LED_GPIO);
-    led_fd = open(path, O_WRONLY);
-
-    // configure buttons
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-        int gpio = BUTTON_GPIOS[i];
-
-        snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/direction", gpio);
-        f = open(path, O_WRONLY);
-        if (f >= 0) {
-            write(f, "in", 2);
-            close(f);
-        }
-
-        snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/edge", gpio);
-        f = open(path, O_WRONLY);
-        if (f >= 0) {
-            write(f, "both", 4);
-            close(f);
-        }
-
-        snprintf(path, sizeof(path), GPIO_DIR "/gpio%d/value", gpio);
-        button_fds[i] = open(path, O_RDONLY | O_NONBLOCK);
-    }
-
-    /* clear initial state */
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-        char buf[8];
-        lseek(button_fds[i], 0, SEEK_SET);
-        read(button_fds[i], buf, sizeof(buf));
-    }
-}
-
-static void screen_init()
-{
-    ssd1306_init();
-    ssd1306_clear_display();
-    ssd1306_set_position (0,0);
-    ssd1306_puts("CSEL1a - SP.07");
-    ssd1306_set_position (0,1);
-    ssd1306_puts("  Demo - SW");
-    ssd1306_set_position (0,2);
-    ssd1306_puts("--------------");
-    ssd1306_set_position (0,3);
-    ssd1306_puts("Mode: Unknown");
-    ssd1306_set_position (0,4);
-    ssd1306_puts("--------------");
-    ssd1306_set_position (0,5);
-    ssd1306_puts("Temp: xx'C");
-    ssd1306_set_position (0,6);
-    ssd1306_puts("Freq: xxHz");
-}
-
-static void screen_refresh()
-{
-    int freq = fan_read_frequency();
-    int temp_mc = fan_get_cpu_temp();
-    bool manual = fan_is_manual_mode();
-
-    ssd1306_set_position(0, 3);
-    ssd1306_puts(manual ? "Mode: Manual " : "Mode: Auto   ");
-    
-    ssd1306_set_position(0, 5);
-    if (temp_mc >= 0) {
-        char display[20];
-        snprintf(display, sizeof(display), "Temp: %d'C  ", temp_mc / 1000);
-        ssd1306_puts(display);
-    } else {
-        ssd1306_puts("Temp: --'C  ");
-    }
-
-    ssd1306_set_position(0, 6);
-    ssd1306_puts("Freq: ");
-    char freq_buf[20];
-    snprintf(freq_buf, sizeof(freq_buf), "%dHz", freq);
-    ssd1306_puts(freq_buf);
-}
 
 /* ---------------- TIMER ---------------- */
 
@@ -193,21 +61,6 @@ static int create_timer(int interval_ms)
     return tfd;
 }
 
-bool is_button_pressed(int fd)
-{
-    char buf[4];
-    lseek(fd, 0, SEEK_SET);
-    read(fd, buf, sizeof(buf));
-    return buf[0] == '1';
-}
-
-void set_led(bool on)
-{
-    if (led_fd >= 0) {
-        const char *val = on ? "1" : "0";
-        write(led_fd, val, 1);
-    }
-}
 
 /* ---------------- EVENT HANDLER ---------------- */
 
@@ -320,7 +173,7 @@ int main()
 
     //daemonize();
 
-    gpios_init();
+    gpios_fd_t *gpios = gpios_init();
     fan_init();
     screen_init();
 
@@ -329,9 +182,9 @@ int main()
 
     screen_timer_fd = create_timer(SCREEN_REFRESH_INTERVAL_MS);
 
-    button_events[0] = (struct event){ .type = BUTTON1_PRESS, .fd = button_fds[0] };
-    button_events[1] = (struct event){ .type = BUTTON2_PRESS, .fd = button_fds[1] };
-    button_events[2] = (struct event){ .type = BUTTON3_PRESS, .fd = button_fds[2] };
+    button_events[0] = (struct event){ .type = BUTTON1_PRESS, .fd = gpios->button_fds[0] };
+    button_events[1] = (struct event){ .type = BUTTON2_PRESS, .fd = gpios->button_fds[1] };
+    button_events[2] = (struct event){ .type = BUTTON3_PRESS, .fd = gpios->button_fds[2] };
 
     timer_event = (struct event){ .type = REFRESH_SCREEN, .fd = screen_timer_fd };
 
@@ -340,9 +193,9 @@ int main()
     struct epoll_event ev3 = { .events = EPOLLPRI, .data.ptr = &button_events[2] };
     struct epoll_event evt = { .events = EPOLLIN,  .data.ptr = &timer_event };
 
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[0], &ev1);
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[1], &ev2);
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, button_fds[2], &ev3);
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpios->button_fds[0], &ev1);
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpios->button_fds[1], &ev2);
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpios->button_fds[2], &ev3);
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, screen_timer_fd, &evt);
 
     while (1) {
